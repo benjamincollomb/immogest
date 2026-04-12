@@ -325,11 +325,22 @@ document.querySelectorAll(".nav-item[data-tab]").forEach(link => {
   });
 });
 function switchTab(tabId){
+  if(!tabId) return;
+
+  // Sécurité : vérifier que l'onglet existe dans le DOM avant d'agir
+  const tabEl = document.getElementById(`tab-${tabId}`);
+  if(!tabEl) return; // tabId inconnu (ex: lien externe dans la sidebar) → on ignore
+
   document.querySelectorAll(".nav-item[data-tab]").forEach(l=>l.classList.remove("active"));
-  document.querySelector(`.nav-item[data-tab="${tabId}"]`).classList.add("active");
+  const navEl = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
+  if(navEl) navEl.classList.add("active");
+
   document.querySelectorAll(".tab-content").forEach(s=>s.classList.remove("active"));
-  document.getElementById(`tab-${tabId}`).classList.add("active");
-  document.getElementById("topbarTitle").textContent = TAB_TITLES[tabId];
+  tabEl.classList.add("active");
+
+  const titleEl = document.getElementById("topbarTitle");
+  if(titleEl) titleEl.textContent = TAB_TITLES[tabId] || tabId;
+
   if(tabId==="dashboard") renderDashboard();
   if(tabId==="tasks")     renderTasks();
   if(tabId==="orders")    renderOrders();

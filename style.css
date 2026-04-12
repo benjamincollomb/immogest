@@ -115,26 +115,26 @@ img { display:block; max-width:100%; }
   gap:.65rem;
   color:var(--white);
 }
+/* Logo sidebar — mix-blend-mode:screen supprime le fond noir */
 .logo-img {
-  width:38px;
-  height:38px;
+  width:46px;
+  height:46px;
   object-fit:contain;
-  border-radius:6px;
-  background: rgba(255,255,255,.08);
-  padding:2px;
   flex-shrink:0;
+  mix-blend-mode: screen;   /* le noir devient transparent sur fond sombre */
+  filter: brightness(1.15) saturate(1.1);
 }
 .logo-text {
-  font-size:1.1rem;
+  font-size:1.12rem;
   font-weight:700;
   letter-spacing:.01em;
-  background: linear-gradient(90deg, #fff 40%, var(--orange-light) 100%);
+  background: linear-gradient(90deg, #fff 35%, var(--orange-light) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Topbar brand avec logo */
+/* Topbar brand */
 .topbar-brand {
   display:flex;
   align-items:center;
@@ -145,11 +145,33 @@ img { display:block; max-width:100%; }
   width:32px;
   height:32px;
   object-fit:contain;
-  display:none; /* visible seulement mobile */
+  display:none;
+  mix-blend-mode: multiply; /* sur fond blanc, le noir disparaît */
+  filter: brightness(.9) saturate(1.2);
 }
 @media(max-width:768px) {
   .topbar-logo { display:block; }
 }
+
+/* ---- LOGO EN FILIGRANE SUR LE FOND ---- */
+.main-wrapper {
+  position: relative; /* nécessaire pour le pseudo-élément */
+}
+.main-wrapper::before {
+  content: "";
+  position: fixed;
+  bottom: -60px;
+  right: -60px;
+  width: 480px;
+  height: 480px;
+  background: url("logo.png") center/contain no-repeat;
+  opacity: .045;             /* très discret, juste visible */
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: multiply;
+}
+/* Les sections s'affichent au-dessus du filigrane */
+.tab-content { position: relative; z-index: 1; }
 
 .sidebar-toggle {
   background:none;
