@@ -10,6 +10,146 @@
 </head>
 <body>
 
+  <!-- ======================================================
+       ÉCRAN DE CONNEXION
+  ====================================================== -->
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-logo-wrap">
+        <img src="logo.png" alt="ImmoGest" class="login-logo"/>
+      </div>
+      <div class="login-app-name">ImmoGest</div>
+      <div class="login-subtitle">Gestion Immobilière</div>
+
+      <form class="login-form" id="loginForm" autocomplete="off">
+        <div class="login-field">
+          <label>Mot de passe</label>
+          <div class="login-field-inner">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="loginPassword" placeholder="Entrez votre mot de passe" autocomplete="current-password"/>
+            <button type="button" class="login-toggle-pw" id="loginTogglePw" tabindex="-1">
+              <i class="fa-solid fa-eye" id="loginEyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="login-error hidden" id="loginError">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span id="loginErrorMsg">Mot de passe incorrect.</span>
+        </div>
+
+        <button type="submit" class="login-btn">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i>
+          Se connecter
+        </button>
+      </form>
+
+      <div class="login-footer">ImmoGest © 2025 — Accès sécurisé</div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       PANNEAU ADMINISTRATION (slide-in)
+  ====================================================== -->
+  <div class="admin-overlay hidden" id="adminOverlay">
+    <div class="admin-panel" id="adminPanel">
+
+      <div class="admin-header">
+        <div class="admin-header-left">
+          <div class="admin-header-icon"><i class="fa-solid fa-screwdriver-wrench"></i></div>
+          <div>
+            <h2>Administration</h2>
+            <p>Paramètres réservés à l'administrateur</p>
+          </div>
+        </div>
+        <button class="admin-close" id="adminClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="admin-body">
+
+        <!-- Section : Noms des immeubles -->
+        <div class="admin-section">
+          <div class="admin-section-title">
+            <i class="fa-solid fa-building"></i>
+            Noms des immeubles
+          </div>
+          <p style="font-size:.83rem;color:var(--text-light);margin-bottom:.85rem">
+            Modifiez le nom de chacun de vos 9 immeubles. Ces noms sont utilisés partout dans l'application.
+          </p>
+          <div class="buildings-rename-grid" id="buildingsRenameGrid">
+            <!-- Généré par JS -->
+          </div>
+          <div style="margin-top:1rem;display:flex;gap:.65rem">
+            <button class="btn btn-primary" id="btnSaveBuildings">
+              <i class="fa-solid fa-floppy-disk"></i> Enregistrer les noms
+            </button>
+            <button class="btn btn-ghost" id="btnResetBuildings">
+              <i class="fa-solid fa-rotate-left"></i> Réinitialiser
+            </button>
+          </div>
+        </div>
+
+        <!-- Section : Mot de passe -->
+        <div class="admin-section">
+          <div class="admin-section-title">
+            <i class="fa-solid fa-key"></i>
+            Changer le mot de passe
+          </div>
+          <div class="admin-pw-form">
+            <div class="admin-pw-field">
+              <label>Mot de passe actuel</label>
+              <div class="pw-input-wrap">
+                <input type="password" id="adminPwCurrent" placeholder="Mot de passe actuel"/>
+                <button type="button" class="admin-pw-toggle" data-target="adminPwCurrent">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="admin-pw-field">
+              <label>Nouveau mot de passe</label>
+              <div class="pw-input-wrap">
+                <input type="password" id="adminPwNew" placeholder="Nouveau mot de passe (min. 6 car.)"/>
+                <button type="button" class="admin-pw-toggle" data-target="adminPwNew">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="admin-pw-field">
+              <label>Confirmer le nouveau mot de passe</label>
+              <div class="pw-input-wrap">
+                <input type="password" id="adminPwConfirm" placeholder="Confirmer le nouveau mot de passe"/>
+                <button type="button" class="admin-pw-toggle" data-target="adminPwConfirm">
+                  <i class="fa-solid fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="btnChangePassword" style="align-self:flex-start">
+              <i class="fa-solid fa-shield-halved"></i> Changer le mot de passe
+            </button>
+          </div>
+        </div>
+
+        <!-- Section : Zone dangereuse -->
+        <div class="admin-section">
+          <div class="admin-section-title">
+            <i class="fa-solid fa-triangle-exclamation" style="color:var(--high)"></i>
+            Zone dangereuse
+          </div>
+          <div class="admin-danger-zone">
+            <p><strong>Réinitialiser toutes les données</strong> — Supprime définitivement toutes les tâches, commandes, places et appartements. Les noms des immeubles et le mot de passe sont conservés.</p>
+            <button class="btn" id="btnResetAllData" style="background:var(--high);color:#fff;border-color:var(--high)">
+              <i class="fa-solid fa-trash-can"></i> Supprimer toutes les données
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================
+       SIDEBAR
+  ====================================================== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo">
@@ -20,6 +160,7 @@
         <i class="fa-solid fa-bars"></i>
       </button>
     </div>
+
     <nav class="sidebar-nav">
       <a href="#" class="nav-item active" data-tab="dashboard">
         <i class="fa-solid fa-house-chimney"></i><span>Tableau de bord</span>
@@ -35,18 +176,39 @@
       <a href="#" class="nav-item" data-tab="spaces">
         <i class="fa-solid fa-car"></i><span>Places & Apparts</span>
       </a>
+
+      <div class="nav-separator"></div>
+
+      <!-- Bouton Admin -->
+      <a href="#" class="nav-item nav-admin" id="navAdmin">
+        <i class="fa-solid fa-screwdriver-wrench"></i>
+        <span>Administration</span>
+        <span class="admin-badge">ADMIN</span>
+      </a>
+
+      <div class="nav-separator"></div>
+
+      <!-- Déconnexion -->
+      <a href="#" class="nav-item nav-logout" id="navLogout">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        <span>Se déconnecter</span>
+      </a>
     </nav>
+
     <div class="sidebar-footer">
       <div class="user-info">
         <div class="user-avatar"><i class="fa-solid fa-user-tie"></i></div>
         <div>
           <div class="user-name">Concierge</div>
-          <div class="user-role">9 immeubles</div>
+          <div class="user-role" id="footerBuildingCount">9 immeubles</div>
         </div>
       </div>
     </div>
   </aside>
 
+  <!-- ======================================================
+       MAIN CONTENT
+  ====================================================== -->
   <div class="main-wrapper">
     <header class="topbar">
       <button class="mobile-menu-btn" id="mobileMenuBtn"><i class="fa-solid fa-bars"></i></button>
@@ -114,19 +276,15 @@
         <div class="filter-group">
           <label for="filterTaskStatus"><i class="fa-solid fa-circle-half-stroke"></i> Statut</label>
           <select id="filterTaskStatus">
-            <option value="">Tous</option>
-            <option value="todo">À faire</option>
-            <option value="inprogress">En cours</option>
-            <option value="done">Terminé</option>
+            <option value="">Tous</option><option value="todo">À faire</option>
+            <option value="inprogress">En cours</option><option value="done">Terminé</option>
           </select>
         </div>
         <div class="filter-group">
           <label for="filterTaskPriority"><i class="fa-solid fa-flag"></i> Priorité</label>
           <select id="filterTaskPriority">
-            <option value="">Toutes</option>
-            <option value="high">Haute</option>
-            <option value="medium">Moyenne</option>
-            <option value="low">Basse</option>
+            <option value="">Toutes</option><option value="high">Haute</option>
+            <option value="medium">Moyenne</option><option value="low">Basse</option>
           </select>
         </div>
         <div class="filter-group search-group">
@@ -137,7 +295,7 @@
       <div class="tasks-list" id="tasksList"></div>
     </section>
 
-    <!-- COMMANDES (multi-produits) -->
+    <!-- COMMANDES -->
     <section class="tab-content" id="tab-orders">
       <div class="page-header">
         <h1>Commandes</h1>
@@ -147,10 +305,8 @@
         <div class="filter-group">
           <label for="filterOrderStatus"><i class="fa-solid fa-circle-half-stroke"></i> Statut</label>
           <select id="filterOrderStatus">
-            <option value="">Tous</option>
-            <option value="ordered">Commandé</option>
-            <option value="pending">En attente</option>
-            <option value="received">Reçu</option>
+            <option value="">Tous</option><option value="ordered">Commandé</option>
+            <option value="pending">En attente</option><option value="received">Reçu</option>
           </select>
         </div>
         <div class="filter-group">
@@ -181,16 +337,14 @@
       <div class="spaces-grid">
         <div class="card">
           <div class="card-header">
-            <i class="fa-solid fa-square-parking"></i>
-            <h2>Places de parking libres</h2>
+            <i class="fa-solid fa-square-parking"></i><h2>Places de parking libres</h2>
             <span class="count-badge" id="countSpaces">0</span>
           </div>
           <div class="spaces-list" id="spacesList"><p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucune place libre</p></div>
         </div>
         <div class="card">
           <div class="card-header">
-            <i class="fa-solid fa-door-open"></i>
-            <h2>Appartements libres</h2>
+            <i class="fa-solid fa-door-open"></i><h2>Appartements libres</h2>
             <span class="count-badge" id="countApts">0</span>
           </div>
           <div class="spaces-list" id="aptsList"><p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucun appartement libre</p></div>
