@@ -116,8 +116,7 @@ img { display:block; max-width:100%; }
   color:var(--white);
 }
 /* ============================================================
-   LOGO — suppression du fond noir via mix-blend-mode: screen
-   Le fond noir disparaît sur fond sombre, les couleurs restent
+   LOGO — fond transparent, fonctionne partout sans blend mode
    ============================================================ */
 
 /* Sidebar logo */
@@ -132,8 +131,6 @@ img { display:block; max-width:100%; }
   height:44px;
   object-fit:contain;
   flex-shrink:0;
-  mix-blend-mode: screen;   /* noir → transparent sur fond sombre */
-  filter: brightness(1.1) saturate(1.15);
 }
 .logo-text {
   font-size:1.12rem;
@@ -157,47 +154,39 @@ img { display:block; max-width:100%; }
   height:32px;
   object-fit:contain;
   display:none;
-  mix-blend-mode: multiply;
-  filter: brightness(.9) saturate(1.2);
 }
 @media(max-width:768px) {
   .topbar-logo { display:block; }
 }
 
-/* Login logo — fond sombre derrière pour activer screen */
+/* Login logo */
 .login-logo-bg {
   width: 130px;
   height: 130px;
-  background: var(--navy);           /* fond sombre = le noir du logo disparaît */
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(26,38,64,.35), 0 0 0 4px rgba(59,111,232,.2);
   margin: 0 auto;
 }
 .login-logo {
-  width: 115px;
-  height: 115px;
+  width: 120px;
+  height: 120px;
   object-fit: contain;
-  mix-blend-mode: screen;            /* fond noir → transparent sur fond navy */
-  filter: brightness(1.1) saturate(1.1);
+  filter: drop-shadow(0 4px 16px rgba(26,38,64,.25));
 }
 
-/* ---- FILIGRANE : logo en arrière-plan du contenu ---- */
+/* ---- FILIGRANE PLEIN ÉCRAN ---- */
 .logo-watermark {
   position: fixed;
-  bottom: -40px;
-  right: -40px;
-  width: 420px;
-  height: 420px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(75vw, 75vh);       /* grand mais sans dépasser l'écran */
+  height: min(75vw, 75vh);
   object-fit: contain;
-  opacity: 0.055;
+  opacity: 0.07;                /* très discret */
   pointer-events: none;
   z-index: 0;
-  mix-blend-mode: multiply;         /* fond noir → invisible sur fond clair */
-  filter: saturate(0) brightness(0.3); /* rend le logo gris neutre, très discret */
   user-select: none;
 }
 
