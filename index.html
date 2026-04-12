@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ImmoGest — Gestion Immobilière</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"/>
+  <link rel="apple-touch-icon" href="favicon-32.png"/>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
@@ -303,7 +306,12 @@
     <section class="tab-content" id="tab-orders">
       <div class="page-header">
         <h1>Commandes</h1>
-        <button class="btn btn-primary" id="btnAddOrder"><i class="fa-solid fa-plus"></i> Nouvelle commande</button>
+        <div class="btn-group">
+          <button class="btn btn-secondary" id="btnExportAllPDF">
+            <i class="fa-solid fa-file-pdf"></i> Exporter tout en PDF
+          </button>
+          <button class="btn btn-primary" id="btnAddOrder"><i class="fa-solid fa-plus"></i> Nouvelle commande</button>
+        </div>
       </div>
       <div class="filters-bar">
         <div class="filter-group">
@@ -373,6 +381,8 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

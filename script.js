@@ -609,8 +609,9 @@ function renderOrders(){
         </div>
         <div class="order-card-actions">
           <span class="order-summary-count">${n} produit${n>1?"s":""}</span>
-          <button class="btn-icon edit"   data-id="${o.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-icon delete" data-id="${o.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+          <button class="btn-icon pdf-btn" data-id="${o.id}" title="Exporter en PDF" style="color:#dc2626"><i class="fa-solid fa-file-pdf"></i></button>
+          <button class="btn-icon edit"    data-id="${o.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn-icon delete"  data-id="${o.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
           <button class="order-expand-btn" data-expand="${o.id}" title="Voir les produits">
             <i class="fa-solid fa-chevron-down"></i>
           </button>
@@ -645,6 +646,7 @@ function renderOrders(){
   });
   c.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();editOrder(b.dataset.id);}));
   c.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();deleteOrder(b.dataset.id);}));
+  c.querySelectorAll(".pdf-btn").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();exportOrderPDF(b.dataset.id);}));
   document.getElementById("badgeOrders").textContent=orders.filter(o=>o.status==="ordered"||o.status==="pending").length;
 }
 
@@ -979,4 +981,262 @@ if(isLoggedIn()){
   initApp();
 } else {
   showLogin();
+}
+
+/* ============================================================
+   21. GÉNÉRATION PDF — BON DE COMMANDE
+   Utilise jsPDF + jsPDF-AutoTable (chargés via CDN)
+   ============================================================ */
+
+/** Convertit logo.png en base64 pour l'intégrer dans le PDF */
+async function getLogoBase64() {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = () => resolve(null);
+    img.src = "logo.png?" + Date.now(); // cache-bust
+  });
+}
+
+/**
+ * Génère un PDF professionnel pour une commande.
+ * @param {string} id - ID de la commande
+ */
+async function exportOrderPDF(id) {
+  const o = orders.find(o => o.id === id);
+  if (!o) return;
+
+  if (typeof window.jspdf === "undefined") {
+    showToast("Bibliothèque PDF en cours de chargement, réessaie dans 2 secondes.", "info");
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+  const PAGE_W  = 210;
+  const MARGIN  = 18;
+  const CONTENT = PAGE_W - MARGIN * 2;
+  const TODAY   = new Date().toLocaleDateString("fr-CH", { day:"2-digit", month:"2-digit", year:"numeric" });
+
+  // Palette couleurs ImmoGest
+  const NAVY   = [26,  38,  64];
+  const BLUE   = [30,  92, 191];
+  const ORANGE = [232, 106,  26];
+  const LGRAY  = [240, 243, 251];
+  const MGRAY  = [100, 116, 148];
+
+  /* ---- HEADER BLEU ---- */
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, PAGE_W, 38, "F");
+
+  // Logo
+  const logoB64 = await getLogoBase64();
+  if (logoB64) {
+    doc.addImage(logoB64, "PNG", MARGIN, 4, 30, 30);
+  }
+
+  // Titre app
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("ImmoGest", MARGIN + 33, 17);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(160, 180, 220);
+  doc.text("Gestion Immobilière", MARGIN + 33, 23);
+
+  // Titre du document (droite)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(255, 255, 255);
+  doc.text("BON DE COMMANDE", PAGE_W - MARGIN, 16, { align: "right" });
+
+  // Numéro de commande + date
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(160, 180, 220);
+  const orderNum = "CMD-" + o.id.toUpperCase().slice(0, 8);
+  doc.text(`N° ${orderNum}`, PAGE_W - MARGIN, 22, { align: "right" });
+  doc.text(`Émis le ${TODAY}`, PAGE_W - MARGIN, 27, { align: "right" });
+
+  /* ---- BANDE ORANGE DÉCO ---- */
+  doc.setFillColor(...ORANGE);
+  doc.rect(0, 38, PAGE_W, 2.5, "F");
+
+  let y = 50;
+
+  /* ---- BLOC INFOS COMMANDE ---- */
+  // Colonne gauche : Fournisseur
+  doc.setFillColor(...LGRAY);
+  doc.roundedRect(MARGIN, y, CONTENT / 2 - 4, 36, 2, 2, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...MGRAY);
+  doc.text("FOURNISSEUR", MARGIN + 5, y + 7);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...NAVY);
+  doc.text(o.supplier || "Non précisé", MARGIN + 5, y + 15);
+
+  // Colonne droite : détails
+  const rx = MARGIN + CONTENT / 2 + 4;
+  const rw = CONTENT / 2 - 4;
+  doc.setFillColor(...LGRAY);
+  doc.roundedRect(rx, y, rw, 36, 2, 2, "F");
+
+  const details = [
+    ["Date de commande", formatDate(o.date)],
+    ["Statut",           STATUS_ORDER_LABELS[o.status] || o.status],
+    ["Immeuble",         o.building || "— Général —"],
+  ];
+  doc.setFontSize(7.5);
+  details.forEach(([label, val], i) => {
+    const dy = y + 8 + i * 10;
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...MGRAY);
+    doc.text(label, rx + 5, dy);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...NAVY);
+    doc.text(String(val), rx + 5, dy + 5);
+  });
+
+  y += 44;
+
+  /* ---- NOTES GÉNÉRALES ---- */
+  if (o.notes) {
+    doc.setFillColor(255, 244, 230);
+    doc.roundedRect(MARGIN, y, CONTENT, 14, 2, 2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...ORANGE);
+    doc.text("REMARQUES :", MARGIN + 5, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...NAVY);
+    doc.text(o.notes, MARGIN + 35, y + 6);
+    y += 20;
+  }
+
+  /* ---- TITRE TABLEAU ---- */
+  doc.setFillColor(...NAVY);
+  doc.roundedRect(MARGIN, y, CONTENT, 9, 1, 1, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text("LISTE DES ARTICLES", MARGIN + 5, y + 6);
+  y += 9;
+
+  /* ---- TABLEAU DES PRODUITS ---- */
+  const items = o.items || [];
+  const tableBody = items.map((it, idx) => [
+    idx + 1,
+    it.name || "—",
+    it.qty  || "—",
+    it.unit || "—",
+    it.notes || ""
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    head: [["#", "Désignation de l'article", "Qté", "Unité", "Notes / Référence"]],
+    body: tableBody,
+    styles: {
+      font: "helvetica",
+      fontSize: 9,
+      cellPadding: 4,
+      textColor: [...NAVY],
+      lineColor: [220, 228, 240],
+      lineWidth: 0.3,
+    },
+    headStyles: {
+      fillColor: [...BLUE],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 8.5,
+    },
+    alternateRowStyles: { fillColor: [...LGRAY] },
+    columnStyles: {
+      0: { cellWidth: 10,  halign: "center", fontStyle: "bold" },
+      1: { cellWidth: "auto" },
+      2: { cellWidth: 18,  halign: "center" },
+      3: { cellWidth: 22,  halign: "center" },
+      4: { cellWidth: 45 },
+    },
+  });
+
+  y = doc.lastAutoTable.finalY + 14;
+
+  /* ---- SIGNATURES ---- */
+  const sigW = (CONTENT - 10) / 2;
+
+  // Émis par
+  doc.setDrawColor(...BLUE);
+  doc.setLineWidth(0.5);
+  doc.line(MARGIN, y + 20, MARGIN + sigW, y + 20);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...MGRAY);
+  doc.text("Émis par le concierge", MARGIN, y + 25);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...NAVY);
+  doc.text("Date : _______________", MARGIN, y + 32);
+
+  // Validé par la régie
+  const sx2 = MARGIN + sigW + 10;
+  doc.setDrawColor(...ORANGE);
+  doc.line(sx2, y + 20, sx2 + sigW, y + 20);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...MGRAY);
+  doc.text("Validé par la régie", sx2, y + 25);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...NAVY);
+  doc.text("Signature : _______________", sx2, y + 32);
+
+  /* ---- PIED DE PAGE ---- */
+  const pageH = doc.internal.pageSize.height;
+  doc.setFillColor(...NAVY);
+  doc.rect(0, pageH - 14, PAGE_W, 14, "F");
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(140, 160, 200);
+  doc.text(
+    `ImmoGest — Gestion Immobilière  •  Document généré le ${TODAY}  •  Réf. ${orderNum}`,
+    PAGE_W / 2, pageH - 6,
+    { align: "center" }
+  );
+
+  /* ---- EXPORT ---- */
+  const filename = `Commande_${(o.supplier||"ImmoGest").replace(/\s+/g,"_")}_${TODAY.replace(/\//g,"-")}.pdf`;
+  doc.save(filename);
+  showToast(`PDF "${filename}" téléchargé !`, "success");
+}
+
+/* ---- Export TOUS les ordres filtrés ---- */
+async function exportAllOrdersPDF() {
+  const list = typeof getFilteredOrders === "function" ? getFilteredOrders() : orders;
+  if (!list.length) { showToast("Aucune commande à exporter.", "info"); return; }
+  showToast(`Génération de ${list.length} PDF en cours…`, "info");
+  for (const o of list) {
+    await exportOrderPDF(o.id);
+    await new Promise(r => setTimeout(r, 400)); // petit délai entre chaque
+  }
+}
+
+// Bouton "Exporter tout"
+const btnExportAll = document.getElementById("btnExportAllPDF");
+if (btnExportAll) {
+  btnExportAll.addEventListener("click", exportAllOrdersPDF);
 }
