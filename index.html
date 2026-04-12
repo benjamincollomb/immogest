@@ -1,760 +1,326 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>ImmoGest — Gestion Conciergerie</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
-
-const app = initializeApp({
-  apiKey: "AIzaSyAym62mQf-8j9Wg3_sVYJErUuiB7xvJVfk",
-  authDomain: "immogest-188d1.firebaseapp.com",
-  projectId: "immogest-188d1",
-  storageBucket: "immogest-188d1.firebasestorage.app",
-  messagingSenderId: "424374983230",
-  appId: "1:424374983230:web:38c453af61b97c15bb4f6f"
-});
-
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// ===================== AUTH =====================
-window.login = async () => {
-  const email = document.getElementById('email').value.trim();
-  const pass = document.getElementById('password').value;
-  const err = document.getElementById('login-error');
-  const btn = document.getElementById('login-btn');
-  err.textContent = '';
-  btn.textContent = 'Connexion...';
-  btn.disabled = true;
-  try {
-    await signInWithEmailAndPassword(auth, email, pass);
-  } catch(e) {
-    err.textContent = 'Email ou mot de passe incorrect';
-    btn.textContent = 'Se connecter';
-    btn.disabled = false;
-  }
-};
-
-window.logout = async () => {
-  if (confirm('Se déconnecter ?')) await signOut(auth);
-};
-
-onAuthStateChanged(auth, user => {
-  if (user) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    document.getElementById('user-email').textContent = user.email.split('@')[0];
-    loadAll();
-  } else {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('app').style.display = 'none';
-  }
-});
-
-// ===================== NAVIGATION =====================
-window.showPage = (page) => {
-  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + page).style.display = 'block';
-  document.getElementById('nav-' + page).classList.add('active');
-  // Close mobile menu
-  document.getElementById('sidebar').classList.remove('open');
-};
-
-// ===================== LOAD ALL =====================
-async function loadAll() {
-  showPage('dashboard');
-  await Promise.all([loadTaches(), loadInterventions(), loadCommandes(), loadParkings(), loadLocataires()]);
-  updateStats();
-}
-
-// ===================== TACHES =====================
-window.loadTaches = async () => {
-  const list = document.getElementById('taches-list');
-  const listDash = document.getElementById('taches-dash');
-  list.innerHTML = loading();
-  try {
-    const q = query(collection(db, 'taches'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    let html = '';
-    snap.forEach(d => {
-      const t = d.data();
-      html += `<div class="list-item">
-        <div class="checkbox ${t.done?'done':''}" onclick="toggleTache('${d.id}',${t.done})">${t.done?'✓':''}</div>
-        <div style="flex:1">
-          <div class="item-title ${t.done?'done':''}">${t.titre}</div>
-          <div class="item-sub">${t.immeuble||''}</div>
-        </div>
-        <div class="badge ${t.done?'green':'orange'}">${t.done?'Fait':'À faire'}</div>
-        <div class="del-btn" onclick="deleteTache('${d.id}')">×</div>
-      </div>`;
-    });
-    list.innerHTML = html || empty('Aucune tâche — clique + pour en ajouter');
-    listDash.innerHTML = html || empty('Aucune tâche — clique + pour en ajouter');
-    updateStats();
-  } catch(e) { list.innerHTML = empty('Erreur de chargement'); }
-};
-
-window.toggleTache = async (id, done) => {
-  await updateDoc(doc(db, 'taches', id), { done: !done });
-  loadTaches();
-};
-
-window.deleteTache = async (id) => {
-  if (!confirm('Supprimer cette tâche ?')) return;
-  await deleteDoc(doc(db, 'taches', id));
-  loadTaches();
-};
-
-window.addTache = async () => {
-  const titre = document.getElementById('t-titre').value.trim();
-  const immeuble = document.getElementById('t-imm').value.trim();
-  if (!titre) { alert('Entre un titre'); return; }
-  await addDoc(collection(db, 'taches'), { titre, immeuble, done: false, createdAt: serverTimestamp() });
-  closeModal('modal-tache');
-  document.getElementById('t-titre').value = '';
-  document.getElementById('t-imm').value = '';
-  loadTaches();
-};
-
-// ===================== INTERVENTIONS =====================
-window.loadInterventions = async () => {
-  const list = document.getElementById('interventions-list');
-  const listDash = document.getElementById('interventions-dash');
-  list.innerHTML = loading();
-  try {
-    const q = query(collection(db, 'interventions'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    let html = '';
-    const labels = { urgent:'Urgent', normal:'En cours', resolu:'Résolu' };
-    snap.forEach(d => {
-      const t = d.data();
-      html += `<div class="list-item">
-        <div class="int-dot ${t.priorite}"></div>
-        <div style="flex:1">
-          <div class="item-title">${t.titre}</div>
-          <div class="item-sub">${t.immeuble||''} ${t.date?'— '+t.date:''}</div>
-        </div>
-        <div class="badge ${t.priorite=='urgent'?'red':t.priorite=='resolu'?'green':'orange'}">${labels[t.priorite]||t.priorite}</div>
-        <div class="del-btn" onclick="deleteIntervention('${d.id}')">×</div>
-      </div>`;
-    });
-    list.innerHTML = html || empty('Aucune intervention');
-    listDash.innerHTML = html || empty('Aucune intervention');
-    updateStats();
-  } catch(e) { list.innerHTML = empty('Erreur de chargement'); }
-};
-
-window.deleteIntervention = async (id) => {
-  if (!confirm('Supprimer ?')) return;
-  await deleteDoc(doc(db, 'interventions', id));
-  loadInterventions();
-};
-
-window.addIntervention = async () => {
-  const titre = document.getElementById('i-titre').value.trim();
-  const immeuble = document.getElementById('i-imm').value.trim();
-  const priorite = document.getElementById('i-prio').value;
-  if (!titre) { alert('Entre un titre'); return; }
-  const date = new Date().toLocaleDateString('fr-CH');
-  await addDoc(collection(db, 'interventions'), { titre, immeuble, priorite, date, createdAt: serverTimestamp() });
-  closeModal('modal-intervention');
-  document.getElementById('i-titre').value = '';
-  document.getElementById('i-imm').value = '';
-  loadInterventions();
-};
-
-window.updateIntPrio = async (id, prio) => {
-  await updateDoc(doc(db, 'interventions', id), { priorite: prio });
-  loadInterventions();
-};
-
-// ===================== COMMANDES =====================
-window.loadCommandes = async () => {
-  const list = document.getElementById('commandes-list');
-  const listDash = document.getElementById('commandes-dash');
-  list.innerHTML = loading();
-  try {
-    const snap = await getDocs(collection(db, 'commandes'));
-    let html = '';
-    snap.forEach(d => {
-      const t = d.data();
-      html += `<div class="list-item">
-        <div style="flex:1">
-          <div class="item-title">${t.nom}</div>
-          <div class="item-sub">${t.categorie||'Produit'}</div>
-        </div>
-        <div class="qty-ctrl">
-          <div class="qty-btn" onclick="changeQty('${d.id}',${t.quantite},-1)">−</div>
-          <div class="qty-val">${t.quantite}</div>
-          <div class="qty-btn" onclick="changeQty('${d.id}',${t.quantite},1)">+</div>
-        </div>
-        <div class="del-btn" onclick="deleteCommande('${d.id}')">×</div>
-      </div>`;
-    });
-    list.innerHTML = html || empty('Aucun produit');
-    listDash.innerHTML = html || empty('Aucun produit');
-    updateStats();
-  } catch(e) { list.innerHTML = empty('Erreur'); }
-};
-
-window.changeQty = async (id, current, delta) => {
-  const newQty = Math.max(0, current + delta);
-  await updateDoc(doc(db, 'commandes', id), { quantite: newQty });
-  loadCommandes();
-};
-
-window.deleteCommande = async (id) => {
-  if (!confirm('Supprimer ?')) return;
-  await deleteDoc(doc(db, 'commandes', id));
-  loadCommandes();
-};
-
-window.addCommande = async () => {
-  const nom = document.getElementById('c-nom').value.trim();
-  const categorie = document.getElementById('c-cat').value.trim();
-  if (!nom) { alert('Entre un nom'); return; }
-  await addDoc(collection(db, 'commandes'), { nom, categorie, quantite: 1 });
-  closeModal('modal-commande');
-  document.getElementById('c-nom').value = '';
-  document.getElementById('c-cat').value = '';
-  loadCommandes();
-};
-
-// ===================== PARKINGS =====================
-window.loadParkings = async () => {
-  const list = document.getElementById('parking-list');
-  list.innerHTML = loading();
-  try {
-    const snap = await getDocs(collection(db, 'parkings'));
-    if (snap.empty) {
-      list.innerHTML = empty('Aucune place — clique + pour en ajouter');
-      renderDefaultParking();
-      return;
-    }
-    let html = '<div class="parking-grid">';
-    snap.forEach(d => {
-      const p = d.data();
-      html += `<div class="place ${p.statut}" onclick="cycleParking('${d.id}','${p.statut}')">
-        <span>${p.statut=='libre'?'🟢':p.statut=='occupee'?'🔴':'🟠'}</span>${p.numero}
-      </div>`;
-    });
-    html += '</div>';
-    list.innerHTML = html;
-  } catch(e) { list.innerHTML = empty('Erreur'); }
-};
-
-function renderDefaultParking() {
-  const list = document.getElementById('parking-list');
-  let html = '<div class="parking-grid">';
-  const statuts = ['libre','occupee','occupee','libre','reserve','occupee','libre','libre','occupee','libre'];
-  for(let i=0;i<10;i++) {
-    const s = statuts[i];
-    html += `<div class="place ${s}"><span>${s=='libre'?'🟢':s=='occupee'?'🔴':'🟠'}</span>P${i+1}</div>`;
-  }
-  html += '</div>';
-  list.innerHTML = html;
-}
-
-window.cycleParking = async (id, current) => {
-  const next = current=='libre'?'occupee':current=='occupee'?'reserve':'libre';
-  await updateDoc(doc(db, 'parkings', id), { statut: next });
-  loadParkings();
-};
-
-window.addParking = async () => {
-  const immeuble = document.getElementById('p-imm').value.trim();
-  const nb = parseInt(document.getElementById('p-nb').value) || 10;
-  if (!immeuble) { alert('Entre un immeuble'); return; }
-  const batch = [];
-  for(let i=1;i<=nb;i++) {
-    batch.push(addDoc(collection(db, 'parkings'), { immeuble, numero: 'P'+i, statut: 'libre' }));
-  }
-  await Promise.all(batch);
-  closeModal('modal-parking');
-  document.getElementById('p-imm').value = '';
-  loadParkings();
-};
-
-// ===================== LOCATAIRES =====================
-window.loadLocataires = async () => {
-  const list = document.getElementById('locataires-list');
-  list.innerHTML = loading();
-  try {
-    const q = query(collection(db, 'locataires'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    let html = '';
-    snap.forEach(d => {
-      const l = d.data();
-      html += `<div class="list-item">
-        <div class="avatar-sm">${l.prenom?l.prenom[0].toUpperCase():'?'}</div>
-        <div style="flex:1">
-          <div class="item-title">${l.prenom||''} ${l.nom||''}</div>
-          <div class="item-sub">${l.immeuble||''} — App. ${l.appartement||''} ${l.tel?'· '+l.tel:''}</div>
-        </div>
-        <div class="del-btn" onclick="deleteLocataire('${d.id}')">×</div>
-      </div>`;
-    });
-    list.innerHTML = html || empty('Aucun locataire');
-    updateStats();
-  } catch(e) { list.innerHTML = empty('Erreur'); }
-};
-
-window.deleteLocataire = async (id) => {
-  if (!confirm('Supprimer ?')) return;
-  await deleteDoc(doc(db, 'locataires', id));
-  loadLocataires();
-};
-
-window.addLocataire = async () => {
-  const prenom = document.getElementById('l-prenom').value.trim();
-  const nom = document.getElementById('l-nom').value.trim();
-  const immeuble = document.getElementById('l-imm').value.trim();
-  const appartement = document.getElementById('l-apt').value.trim();
-  const tel = document.getElementById('l-tel').value.trim();
-  if (!nom) { alert('Entre un nom'); return; }
-  await addDoc(collection(db, 'locataires'), { prenom, nom, immeuble, appartement, tel, createdAt: serverTimestamp() });
-  closeModal('modal-locataire');
-  ['l-prenom','l-nom','l-imm','l-apt','l-tel'].forEach(id => document.getElementById(id).value = '');
-  loadLocataires();
-};
-
-// ===================== STATS =====================
-function updateStats() {
-  const taches = document.querySelectorAll('#taches-list .list-item').length;
-  const done = document.querySelectorAll('#taches-list .checkbox.done').length;
-  const ints = document.querySelectorAll('#interventions-list .list-item').length;
-  const cmds = document.querySelectorAll('#commandes-list .list-item').length;
-  const locs = document.querySelectorAll('#locataires-list .list-item').length;
-  set('stat-taches', done+'/'+taches);
-  set('stat-ints', ints);
-  set('stat-cmds', cmds);
-  set('stat-locs', locs);
-}
-
-function set(id, val) { const el = document.getElementById(id); if(el) el.textContent = val; }
-function loading() { return '<div class="loading">Chargement...</div>'; }
-function empty(msg) { return `<div class="empty">${msg}</div>`; }
-
-// ===================== MODALS =====================
-window.openModal = id => document.getElementById(id).style.display = 'flex';
-window.closeModal = id => document.getElementById(id).style.display = 'none';
-
-document.addEventListener('keydown', e => {
-  if(e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
-});
-
-// ===================== MOBILE MENU =====================
-window.toggleMenu = () => document.getElementById('sidebar').classList.toggle('open');
-
-// ===================== DATE =====================
-const now = new Date();
-const dateStr = now.toLocaleDateString('fr-CH', { weekday:'long', day:'numeric', month:'long' });
-document.getElementById('date-display').textContent = dateStr;
-</script>
-<style>
-:root {
-  --navy:#0f1c2e; --navy-l:#162335; --navy-m:#1e3250;
-  --gold:#c9a84c; --gold-l:#e8c97a;
-  --cream:#f5f0e8; --muted:#7a8fa6;
-  --green:#3d9970; --red:#c0392b; --orange:#e67e22;
-  --border:rgba(201,168,76,0.15); --card:rgba(255,255,255,0.04);
-  --sidebar-w:72px;
-}
-*{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--cream);min-height:100vh;}
-
-/* ===== LOGIN ===== */
-#login-screen{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;z-index:1000;flex-direction:column;}
-.login-box{background:var(--navy-l);border:1px solid var(--border);border-radius:20px;padding:36px;width:320px;display:flex;flex-direction:column;gap:14px;}
-.login-title{font-family:'DM Serif Display',serif;font-size:22px;text-align:center;color:var(--cream);}
-.login-sub{font-size:12px;color:var(--muted);text-align:center;margin-top:-8px;}
-.inp{background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--cream);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;width:100%;}
-.inp:focus{border-color:var(--gold);}
-.inp::placeholder{color:var(--muted);}
-#login-error{color:#e74c3c;font-size:12px;text-align:center;min-height:16px;}
-
-/* ===== SIDEBAR ===== */
-#sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);background:var(--navy-l);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:16px 0;z-index:200;gap:6px;transition:transform 0.3s;}
-.logo-wrap{margin-bottom:16px;}
-.nav-item{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:20px;position:relative;transition:all 0.2s;}
-.nav-item:hover{background:var(--card);color:var(--cream);}
-.nav-item.active{background:rgba(201,168,76,0.15);color:var(--gold);}
-.tooltip{position:absolute;left:54px;background:var(--navy-m);color:var(--cream);padding:5px 10px;border-radius:6px;font-size:12px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.2s;border:1px solid var(--border);z-index:300;}
-.nav-item:hover .tooltip{opacity:1;}
-.sidebar-bottom{margin-top:auto;}
-
-/* ===== MAIN ===== */
-#app{display:none;}
-.main{margin-left:var(--sidebar-w);padding:24px 28px;min-height:100vh;}
-.page{display:none;}
-
-/* ===== TOPBAR ===== */
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
-.topbar h1{font-family:'DM Serif Display',serif;font-size:22px;}
-.topbar p{font-size:12px;color:var(--muted);margin-top:2px;}
-.topbar-right{display:flex;align-items:center;gap:10px;}
-.date-pill{background:var(--card);border:1px solid var(--border);padding:7px 12px;border-radius:8px;font-size:12px;color:var(--muted);}
-.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-l));display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:var(--navy);cursor:pointer;}
-.hamburger{display:none;font-size:22px;cursor:pointer;color:var(--cream);}
-
-/* ===== STATS ===== */
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
-.stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;cursor:pointer;transition:transform 0.2s,border-color 0.2s;}
-.stat:hover{transform:translateY(-2px);border-color:rgba(201,168,76,0.3);}
-.stat-icon{font-size:20px;margin-bottom:10px;}
-.stat-val{font-family:'DM Serif Display',serif;font-size:28px;color:var(--cream);}
-.stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:3px;}
-
-/* ===== GRID ===== */
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
-.g3{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:18px;}
-
-/* ===== CARD ===== */
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;}
-.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-.card-title{font-size:12px;text-transform:uppercase;letter-spacing:0.8px;color:var(--gold);font-weight:600;}
-.add-btn{width:26px;height:26px;border-radius:8px;background:rgba(201,168,76,0.12);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--gold);cursor:pointer;transition:background 0.2s;}
-.add-btn:hover{background:rgba(201,168,76,0.25);}
-
-/* ===== LIST ITEMS ===== */
-.list-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
-.list-item:last-child{border-bottom:none;}
-.item-title{font-size:13px;color:var(--cream);}
-.item-title.done{text-decoration:line-through;color:var(--muted);}
-.item-sub{font-size:11px;color:var(--muted);margin-top:1px;}
-.del-btn{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted);cursor:pointer;transition:all 0.2s;flex-shrink:0;}
-.del-btn:hover{background:rgba(192,57,43,0.2);color:#e74c3c;}
-.loading{font-size:13px;color:var(--muted);padding:12px 0;}
-.empty{font-size:13px;color:var(--muted);padding:12px 0;font-style:italic;}
-
-/* ===== CHECKBOX ===== */
-.checkbox{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;flex-shrink:0;font-size:11px;}
-.checkbox.done{background:var(--green);border-color:var(--green);color:white;}
-
-/* ===== BADGE ===== */
-.badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap;}
-.badge.green{background:rgba(61,153,112,0.2);color:var(--green);}
-.badge.orange{background:rgba(230,126,34,0.2);color:var(--orange);}
-.badge.red{background:rgba(192,57,43,0.2);color:#e74c3c);}
-
-/* ===== INT DOT ===== */
-.int-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.int-dot.urgent{background:var(--red);}
-.int-dot.normal{background:var(--orange);}
-.int-dot.resolu{background:var(--green);}
-
-/* ===== QTY ===== */
-.qty-ctrl{display:flex;align-items:center;gap:6px;}
-.qty-btn{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.06);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;color:var(--cream);}
-.qty-val{font-size:13px;min-width:20px;text-align:center;color:var(--gold);font-weight:600;}
-
-/* ===== PARKING ===== */
-.parking-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
-.place{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;font-weight:600;cursor:pointer;transition:transform 0.15s;border:1px solid transparent;}
-.place:hover{transform:scale(1.05);}
-.place span{font-size:14px;margin-bottom:2px;}
-.place.libre{background:rgba(61,153,112,0.15);color:var(--green);border-color:rgba(61,153,112,0.2);}
-.place.occupee{background:rgba(192,57,43,0.15);color:#e74c3c;border-color:rgba(192,57,43,0.2);}
-.place.reserve{background:rgba(230,126,34,0.15);color:var(--orange);border-color:rgba(230,126,34,0.2);}
-
-/* ===== IMMEUBLES ===== */
-.imm-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:padding-left 0.2s;}
-.imm-item:hover{padding-left:4px;}
-.imm-item:last-child{border-bottom:none;}
-.imm-num{width:30px;height:30px;border-radius:8px;background:rgba(201,168,76,0.1);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--gold);flex-shrink:0;}
-.imm-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.imm-dot.ok{background:var(--green);}
-.imm-dot.warn{background:var(--orange);}
-.imm-dot.alert{background:var(--red);}
-
-/* ===== AVATAR SM ===== */
-.avatar-sm{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-l));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--navy);flex-shrink:0;}
-
-/* ===== PAGE HEADER ===== */
-.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
-.page-title{font-family:'DM Serif Display',serif;font-size:22px;}
-
-/* ===== BUTTON ===== */
-.btn{background:linear-gradient(135deg,var(--gold),var(--gold-l));color:var(--navy);border:none;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity 0.2s;}
-.btn:hover{opacity:0.9;}
-.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:10px 18px;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;}
-.btn-ghost:hover{color:var(--cream);}
-
-/* ===== MODAL ===== */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:20px;}
-.modal{background:var(--navy-l);border:1px solid var(--border);border-radius:20px;padding:28px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px;}
-.modal h3{font-family:'DM Serif Display',serif;font-size:20px;}
-.modal-row{display:flex;gap:10px;}
-select.inp{appearance:none;}
-
-/* ===== LEGEND ===== */
-.legend{display:flex;gap:12px;margin-top:12px;font-size:11px;color:var(--muted);flex-wrap:wrap;}
-.legend span{display:flex;align-items:center;gap:4px;}
-
-/* ===== RESPONSIVE ===== */
-@media(max-width:768px){
-  :root{--sidebar-w:0px;}
-  #sidebar{transform:translateX(-100%);width:220px;align-items:flex-start;padding:20px 16px;}
-  #sidebar.open{transform:translateX(0);}
-  #sidebar .tooltip{display:none;}
-  #sidebar .nav-item{width:100%;justify-content:flex-start;gap:12px;padding:0 10px;}
-  #sidebar .nav-item::after{content:attr(data-label);font-size:14px;color:var(--cream);}
-  .hamburger{display:block;}
-  .main{margin-left:0;padding:16px;}
-  .stats{grid-template-columns:repeat(2,1fr);}
-  .g2,.g3{grid-template-columns:1fr;}
-  .topbar h1{font-size:18px;}
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gestion Conciergerie</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- FontAwesome pour les icônes -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <!-- Google Fonts : DM Sans + DM Mono -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="login-screen">
-  <div class="login-box">
-    <svg width="48" height="48" viewBox="0 0 44 44" style="margin:0 auto" fill="none">
-      <rect width="44" height="44" rx="12" fill="#1e3250"/>
-      <rect x="1" y="1" width="42" height="42" rx="11" stroke="#c9a84c" stroke-width="1" stroke-opacity="0.5"/>
-      <rect x="10" y="14" width="10" height="20" rx="2" fill="#c9a84c" opacity="0.9"/>
-      <rect x="24" y="10" width="10" height="24" rx="2" fill="#c9a84c"/>
-      <rect x="12" y="17" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-      <rect x="12" y="23" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-      <rect x="26" y="13" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-      <rect x="26" y="19" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-      <rect x="26" y="25" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-    </svg>
-    <div class="login-title">ImmoGest</div>
-    <div class="login-sub">Gestion de conciergerie</div>
-    <input id="email" class="inp" type="email" placeholder="Email" autocomplete="email"/>
-    <input id="password" class="inp" type="password" placeholder="Mot de passe" onkeydown="if(event.key==='Enter')login()"/>
-    <div id="login-error"></div>
-    <button id="login-btn" class="btn" onclick="login()" style="padding:12px">Se connecter</button>
-  </div>
-</div>
-
-<!-- APP -->
-<div id="app">
-
-  <!-- SIDEBAR -->
-  <aside id="sidebar">
-    <div class="logo-wrap">
-      <svg width="40" height="40" viewBox="0 0 44 44" fill="none">
-        <rect width="44" height="44" rx="12" fill="#1e3250"/>
-        <rect x="1" y="1" width="42" height="42" rx="11" stroke="#c9a84c" stroke-width="1" stroke-opacity="0.4"/>
-        <rect x="10" y="14" width="10" height="20" rx="2" fill="#c9a84c" opacity="0.9"/>
-        <rect x="24" y="10" width="10" height="24" rx="2" fill="#c9a84c"/>
-        <rect x="12" y="17" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-        <rect x="12" y="23" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-        <rect x="26" y="13" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-        <rect x="26" y="19" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-        <rect x="26" y="25" width="3" height="3" rx="0.5" fill="#0f1c2e"/>
-      </svg>
+  <!-- ======== SIDEBAR ======== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <i class="fa-solid fa-building"></i>
+        <span class="logo-text">ConciergePro</span>
+      </div>
+      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Fermer le menu">
+        <i class="fa-solid fa-bars"></i>
+      </button>
     </div>
-    <div id="nav-dashboard" class="nav-item active" data-label="Tableau de bord" onclick="showPage('dashboard')">🏠<div class="tooltip">Tableau de bord</div></div>
-    <div id="nav-taches" class="nav-item" data-label="Nettoyages" onclick="showPage('taches')">🧹<div class="tooltip">Nettoyages</div></div>
-    <div id="nav-interventions" class="nav-item" data-label="Interventions" onclick="showPage('interventions')">🔧<div class="tooltip">Interventions</div></div>
-    <div id="nav-commandes" class="nav-item" data-label="Commandes" onclick="showPage('commandes')">🛒<div class="tooltip">Commandes</div></div>
-    <div id="nav-parking" class="nav-item" data-label="Parkings" onclick="showPage('parking')">🚗<div class="tooltip">Parkings</div></div>
-    <div id="nav-locataires" class="nav-item" data-label="Locataires" onclick="showPage('locataires')">👥<div class="tooltip">Locataires</div></div>
-    <div class="sidebar-bottom">
-      <div class="nav-item" data-label="Déconnexion" onclick="logout()">🚪<div class="tooltip">Déconnexion</div></div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="dashboard">
+        <i class="fa-solid fa-house-chimney"></i>
+        <span>Tableau de bord</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="tasks">
+        <i class="fa-solid fa-list-check"></i>
+        <span>Tâches</span>
+        <span class="badge" id="badgeTasks">0</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="orders">
+        <i class="fa-solid fa-box"></i>
+        <span>Commandes</span>
+        <span class="badge" id="badgeOrders">0</span>
+      </a>
+      <a href="#" class="nav-item" data-tab="spaces">
+        <i class="fa-solid fa-car"></i>
+        <span>Places & Apparts</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar"><i class="fa-solid fa-user-tie"></i></div>
+        <div>
+          <div class="user-name">Concierge</div>
+          <div class="user-role">9 immeubles</div>
+        </div>
+      </div>
     </div>
   </aside>
 
-  <main class="main">
+  <!-- ======== MAIN CONTENT ======== -->
+  <div class="main-wrapper">
 
-    <!-- DASHBOARD -->
-    <div id="page-dashboard" class="page">
-      <div class="topbar">
-        <div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <div class="hamburger" onclick="toggleMenu()">☰</div>
-            <div>
-              <h1 class="topbar h1" style="font-family:'DM Serif Display',serif;font-size:22px">ImmoGest</h1>
-              <p style="font-size:12px;color:var(--muted)">Bonjour <span id="user-email"></span> 👋</p>
-            </div>
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div class="topbar-title" id="topbarTitle">Tableau de bord</div>
+      <div class="topbar-right">
+        <div class="date-display" id="dateDisplay"></div>
+      </div>
+    </header>
+
+    <!-- ======================================================
+         TAB: DASHBOARD
+    ====================================================== -->
+    <section class="tab-content active" id="tab-dashboard">
+      <div class="page-header">
+        <h1>Vue d'ensemble</h1>
+        <p class="subtitle">Résumé de votre activité</p>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-tasks">
+          <div class="kpi-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpiPending">0</div>
+            <div class="kpi-label">Tâches en attente</div>
           </div>
         </div>
-        <div class="topbar-right">
-          <div class="date-pill" id="date-display"></div>
-          <div class="avatar" onclick="logout()" title="Déconnexion">B</div>
+        <div class="kpi-card kpi-inprogress">
+          <div class="kpi-icon"><i class="fa-solid fa-spinner"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpiInProgress">0</div>
+            <div class="kpi-label">En cours</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-orders">
+          <div class="kpi-icon"><i class="fa-solid fa-truck"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpiOrders">0</div>
+            <div class="kpi-label">Commandes actives</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-spaces">
+          <div class="kpi-icon"><i class="fa-solid fa-square-parking"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpiSpaces">0</div>
+            <div class="kpi-label">Places libres</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-apts">
+          <div class="kpi-icon"><i class="fa-solid fa-door-open"></i></div>
+          <div class="kpi-body">
+            <div class="kpi-value" id="kpiApts">0</div>
+            <div class="kpi-label">Appartements libres</div>
+          </div>
         </div>
       </div>
 
-      <div class="stats">
-        <div class="stat" onclick="showPage('taches')"><div class="stat-icon">🧹</div><div class="stat-val" id="stat-taches">—</div><div class="stat-lbl">Tâches</div></div>
-        <div class="stat" onclick="showPage('interventions')"><div class="stat-icon">🔧</div><div class="stat-val" id="stat-ints">—</div><div class="stat-lbl">Interventions</div></div>
-        <div class="stat" onclick="showPage('commandes')"><div class="stat-icon">🛒</div><div class="stat-val" id="stat-cmds">—</div><div class="stat-lbl">Produits</div></div>
-        <div class="stat" onclick="showPage('locataires')"><div class="stat-icon">👥</div><div class="stat-val" id="stat-locs">—</div><div class="stat-lbl">Locataires</div></div>
-      </div>
+      <!-- Building grid + Today's tasks -->
+      <div class="dashboard-grid">
 
-      <div class="g2">
+        <!-- Buildings overview -->
         <div class="card">
-          <div class="card-head"><div class="card-title">Nettoyages du jour</div><div class="add-btn" onclick="openModal('modal-tache')">+</div></div>
-          <div id="taches-dash"></div>
+          <div class="card-header">
+            <i class="fa-solid fa-building-columns"></i>
+            <h2>Mes immeubles</h2>
+          </div>
+          <div class="buildings-grid" id="buildingsGrid">
+            <!-- Généré par JS -->
+          </div>
         </div>
+
+        <!-- Today's urgent tasks -->
         <div class="card">
-          <div class="card-head"><div class="card-title">Interventions</div><div class="add-btn" onclick="openModal('modal-intervention')">+</div></div>
-          <div id="interventions-dash"></div>
+          <div class="card-header">
+            <i class="fa-solid fa-fire"></i>
+            <h2>Priorités du moment</h2>
+          </div>
+          <div class="today-tasks" id="todayTasks">
+            <p class="empty-msg"><i class="fa-regular fa-circle-check"></i> Aucune tâche haute priorité</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================
+         TAB: TÂCHES
+    ====================================================== -->
+    <section class="tab-content" id="tab-tasks">
+      <div class="page-header">
+        <h1>Tâches</h1>
+        <button class="btn btn-primary" id="btnAddTask">
+          <i class="fa-solid fa-plus"></i> Nouvelle tâche
+        </button>
+      </div>
+
+      <!-- Filtres -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <label for="filterTaskBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
+          <select id="filterTaskBuilding">
+            <option value="">Tous</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterTaskStatus"><i class="fa-solid fa-circle-half-stroke"></i> Statut</label>
+          <select id="filterTaskStatus">
+            <option value="">Tous</option>
+            <option value="todo">À faire</option>
+            <option value="inprogress">En cours</option>
+            <option value="done">Terminé</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="filterTaskPriority"><i class="fa-solid fa-flag"></i> Priorité</label>
+          <select id="filterTaskPriority">
+            <option value="">Toutes</option>
+            <option value="high">Haute</option>
+            <option value="medium">Moyenne</option>
+            <option value="low">Basse</option>
+          </select>
+        </div>
+        <div class="filter-group search-group">
+          <label for="filterTaskSearch"><i class="fa-solid fa-magnifying-glass"></i> Recherche</label>
+          <input type="text" id="filterTaskSearch" placeholder="Rechercher une tâche…"/>
         </div>
       </div>
 
-      <div class="g2">
+      <div class="tasks-list" id="tasksList">
+        <!-- Généré par JS -->
+      </div>
+    </section>
+
+    <!-- ======================================================
+         TAB: COMMANDES
+    ====================================================== -->
+    <section class="tab-content" id="tab-orders">
+      <div class="page-header">
+        <h1>Commandes</h1>
+        <button class="btn btn-primary" id="btnAddOrder">
+          <i class="fa-solid fa-plus"></i> Nouvelle commande
+        </button>
+      </div>
+
+      <!-- Filtres commandes -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <label for="filterOrderStatus"><i class="fa-solid fa-circle-half-stroke"></i> Statut</label>
+          <select id="filterOrderStatus">
+            <option value="">Tous</option>
+            <option value="ordered">Commandé</option>
+            <option value="pending">En attente</option>
+            <option value="received">Reçu</option>
+          </select>
+        </div>
+        <div class="filter-group search-group">
+          <label for="filterOrderSearch"><i class="fa-solid fa-magnifying-glass"></i> Recherche</label>
+          <input type="text" id="filterOrderSearch" placeholder="Article, fournisseur…"/>
+        </div>
+      </div>
+
+      <div class="orders-table-wrap">
+        <table class="data-table" id="ordersTable">
+          <thead>
+            <tr>
+              <th>Article</th>
+              <th>Fournisseur</th>
+              <th>Date</th>
+              <th>Statut</th>
+              <th>Immeuble</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ordersBody">
+            <!-- Généré par JS -->
+          </tbody>
+        </table>
+        <p class="empty-msg hidden" id="ordersEmpty"><i class="fa-solid fa-box-open"></i> Aucune commande trouvée</p>
+      </div>
+    </section>
+
+    <!-- ======================================================
+         TAB: PLACES & APPARTEMENTS
+    ====================================================== -->
+    <section class="tab-content" id="tab-spaces">
+      <div class="page-header">
+        <h1>Places & Appartements</h1>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btnAddSpace">
+            <i class="fa-solid fa-square-parking"></i> Nouvelle place
+          </button>
+          <button class="btn btn-secondary" id="btnAddApt">
+            <i class="fa-solid fa-door-open"></i> Nouvel appartement
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-group" style="margin-bottom:1.5rem">
+        <label for="filterSpaceBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
+        <select id="filterSpaceBuilding" style="min-width:180px">
+          <option value="">Tous</option>
+        </select>
+      </div>
+
+      <div class="spaces-grid">
+        <!-- Parking -->
         <div class="card">
-          <div class="card-head"><div class="card-title">Mes immeubles</div></div>
-          <div class="imm-item"><div class="imm-num">1</div><div style="flex:1"><div class="item-title">Immeuble 1</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">2</div><div style="flex:1"><div class="item-title">Immeuble 2</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">3</div><div style="flex:1"><div class="item-title">Immeuble 3</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">4</div><div style="flex:1"><div class="item-title">Immeuble 4</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">5</div><div style="flex:1"><div class="item-title">Immeuble 5</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">6</div><div style="flex:1"><div class="item-title">Immeuble 6</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">7</div><div style="flex:1"><div class="item-title">Immeuble 7</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">8</div><div style="flex:1"><div class="item-title">Immeuble 8</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
-          <div class="imm-item"><div class="imm-num">9</div><div style="flex:1"><div class="item-title">Immeuble 9</div><div class="item-sub">Adresse à configurer</div></div><div class="imm-dot ok"></div></div>
+          <div class="card-header">
+            <i class="fa-solid fa-square-parking"></i>
+            <h2>Places de parking libres</h2>
+            <span class="count-badge" id="countSpaces">0</span>
+          </div>
+          <div class="spaces-list" id="spacesList">
+            <p class="empty-msg"><i class="fa-solid fa-circle-check"></i> Aucune place libre</p>
+          </div>
         </div>
+
+        <!-- Appartements -->
         <div class="card">
-          <div class="card-head"><div class="card-title">Produits à commander</div><div class="add-btn" onclick="openModal('modal-commande')">+</div></div>
-          <div id="commandes-dash"></div>
+          <div class="card-header">
+            <i class="fa-solid fa-door-open"></i>
+            <h2>Appartements libres</h2>
+            <span class="count-badge" id="countApts">0</span>
+          </div>
+          <div class="spaces-list" id="aptsList">
+            <p class="empty-msg"><i class="fa-solid fa-circle-check"></i> Aucun appartement libre</p>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- TACHES -->
-    <div id="page-taches" class="page">
-      <div class="topbar">
-        <div style="display:flex;align-items:center;gap:10px"><div class="hamburger" onclick="toggleMenu()">☰</div><div class="page-title">🧹 Nettoyages</div></div>
-        <button class="btn" onclick="openModal('modal-tache')">+ Ajouter</button>
+  </div><!-- /main-wrapper -->
+
+  <!-- ======================================================
+       MODAL GÉNÉRIQUE
+  ====================================================== -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Titre</h3>
+        <button class="modal-close" id="modalClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="card"><div id="taches-list"></div></div>
-    </div>
-
-    <!-- INTERVENTIONS -->
-    <div id="page-interventions" class="page">
-      <div class="topbar">
-        <div style="display:flex;align-items:center;gap:10px"><div class="hamburger" onclick="toggleMenu()">☰</div><div class="page-title">🔧 Interventions</div></div>
-        <button class="btn" onclick="openModal('modal-intervention')">+ Signaler</button>
+      <div class="modal-body" id="modalBody">
+        <!-- Contenu dynamique -->
       </div>
-      <div class="card"><div id="interventions-list"></div></div>
-    </div>
-
-    <!-- COMMANDES -->
-    <div id="page-commandes" class="page">
-      <div class="topbar">
-        <div style="display:flex;align-items:center;gap:10px"><div class="hamburger" onclick="toggleMenu()">☰</div><div class="page-title">🛒 Commandes</div></div>
-        <button class="btn" onclick="openModal('modal-commande')">+ Produit</button>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="modalCancel">Annuler</button>
+        <button class="btn btn-primary" id="modalSave">
+          <i class="fa-solid fa-floppy-disk"></i> Enregistrer
+        </button>
       </div>
-      <div class="card"><div id="commandes-list"></div></div>
-    </div>
-
-    <!-- PARKING -->
-    <div id="page-parking" class="page">
-      <div class="topbar">
-        <div style="display:flex;align-items:center;gap:10px"><div class="hamburger" onclick="toggleMenu()">☰</div><div class="page-title">🚗 Parkings</div></div>
-        <button class="btn" onclick="openModal('modal-parking')">+ Configurer</button>
-      </div>
-      <div class="card">
-        <div id="parking-list"></div>
-        <div class="legend">
-          <span><span style="color:var(--green)">●</span> Libre</span>
-          <span><span style="color:var(--red)">●</span> Occupée</span>
-          <span><span style="color:var(--orange)">●</span> Réservée</span>
-          <span style="color:var(--muted);font-style:italic">Clique sur une place pour changer l'état</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- LOCATAIRES -->
-    <div id="page-locataires" class="page">
-      <div class="topbar">
-        <div style="display:flex;align-items:center;gap:10px"><div class="hamburger" onclick="toggleMenu()">☰</div><div class="page-title">👥 Locataires</div></div>
-        <button class="btn" onclick="openModal('modal-locataire')">+ Ajouter</button>
-      </div>
-      <div class="card"><div id="locataires-list"></div></div>
-    </div>
-
-  </main>
-</div>
-
-<!-- MODAL TACHE -->
-<div id="modal-tache" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-tache')">
-  <div class="modal">
-    <h3>Nouvelle tâche</h3>
-    <input id="t-titre" class="inp" placeholder="Ex: Nettoyage hall d'entrée"/>
-    <input id="t-imm" class="inp" placeholder="Immeuble (ex: Imm. 1)"/>
-    <div class="modal-row">
-      <button class="btn" onclick="addTache()" style="flex:1">Ajouter</button>
-      <button class="btn-ghost" onclick="closeModal('modal-tache')" style="flex:1">Annuler</button>
     </div>
   </div>
-</div>
 
-<!-- MODAL INTERVENTION -->
-<div id="modal-intervention" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-intervention')">
-  <div class="modal">
-    <h3>Nouvelle intervention</h3>
-    <input id="i-titre" class="inp" placeholder="Ex: Ascenseur en panne"/>
-    <input id="i-imm" class="inp" placeholder="Immeuble (ex: Imm. 4)"/>
-    <select id="i-prio" class="inp">
-      <option value="urgent">🔴 Urgent</option>
-      <option value="normal" selected>🟠 Normal</option>
-      <option value="resolu">🟢 Résolu</option>
-    </select>
-    <div class="modal-row">
-      <button class="btn" onclick="addIntervention()" style="flex:1">Ajouter</button>
-      <button class="btn-ghost" onclick="closeModal('modal-intervention')" style="flex:1">Annuler</button>
-    </div>
-  </div>
-</div>
+  <!-- ======================================================
+       TOAST NOTIFICATIONS
+  ====================================================== -->
+  <div class="toast-container" id="toastContainer"></div>
 
-<!-- MODAL COMMANDE -->
-<div id="modal-commande" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-commande')">
-  <div class="modal">
-    <h3>Nouveau produit</h3>
-    <input id="c-nom" class="inp" placeholder="Ex: Savon sol, Sacs poubelle..."/>
-    <input id="c-cat" class="inp" placeholder="Catégorie (ex: Nettoyage)"/>
-    <div class="modal-row">
-      <button class="btn" onclick="addCommande()" style="flex:1">Ajouter</button>
-      <button class="btn-ghost" onclick="closeModal('modal-commande')" style="flex:1">Annuler</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL PARKING -->
-<div id="modal-parking" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-parking')">
-  <div class="modal">
-    <h3>Configurer un parking</h3>
-    <input id="p-imm" class="inp" placeholder="Immeuble (ex: Imm. 1)"/>
-    <input id="p-nb" class="inp" type="number" placeholder="Nombre de places (ex: 10)" min="1" max="50"/>
-    <div class="modal-row">
-      <button class="btn" onclick="addParking()" style="flex:1">Créer</button>
-      <button class="btn-ghost" onclick="closeModal('modal-parking')" style="flex:1">Annuler</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL LOCATAIRE -->
-<div id="modal-locataire" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-locataire')">
-  <div class="modal">
-    <h3>Nouveau locataire</h3>
-    <div class="modal-row">
-      <input id="l-prenom" class="inp" placeholder="Prénom"/>
-      <input id="l-nom" class="inp" placeholder="Nom"/>
-    </div>
-    <input id="l-imm" class="inp" placeholder="Immeuble (ex: Imm. 1)"/>
-    <input id="l-apt" class="inp" placeholder="Appartement (ex: 3B)"/>
-    <input id="l-tel" class="inp" placeholder="Téléphone (optionnel)"/>
-    <div class="modal-row">
-      <button class="btn" onclick="addLocataire()" style="flex:1">Ajouter</button>
-      <button class="btn-ghost" onclick="closeModal('modal-locataire')" style="flex:1">Annuler</button>
-    </div>
-  </div>
-</div>
-
+  <script src="script.js"></script>
 </body>
 </html>
