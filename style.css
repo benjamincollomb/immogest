@@ -115,14 +115,25 @@ img { display:block; max-width:100%; }
   gap:.65rem;
   color:var(--white);
 }
-/* Logo sidebar — mix-blend-mode:screen supprime le fond noir */
+/* ============================================================
+   LOGO — suppression du fond noir via mix-blend-mode: screen
+   Le fond noir disparaît sur fond sombre, les couleurs restent
+   ============================================================ */
+
+/* Sidebar logo */
+.logo {
+  display:flex;
+  align-items:center;
+  gap:.65rem;
+  color:var(--white);
+}
 .logo-img {
-  width:46px;
-  height:46px;
+  width:44px;
+  height:44px;
   object-fit:contain;
   flex-shrink:0;
-  mix-blend-mode: screen;   /* le noir devient transparent sur fond sombre */
-  filter: brightness(1.15) saturate(1.1);
+  mix-blend-mode: screen;   /* noir → transparent sur fond sombre */
+  filter: brightness(1.1) saturate(1.15);
 }
 .logo-text {
   font-size:1.12rem;
@@ -146,31 +157,51 @@ img { display:block; max-width:100%; }
   height:32px;
   object-fit:contain;
   display:none;
-  mix-blend-mode: multiply; /* sur fond blanc, le noir disparaît */
+  mix-blend-mode: multiply;
   filter: brightness(.9) saturate(1.2);
 }
 @media(max-width:768px) {
   .topbar-logo { display:block; }
 }
 
-/* ---- LOGO EN FILIGRANE SUR LE FOND ---- */
-.main-wrapper {
-  position: relative; /* nécessaire pour le pseudo-élément */
+/* Login logo — fond sombre derrière pour activer screen */
+.login-logo-bg {
+  width: 130px;
+  height: 130px;
+  background: var(--navy);           /* fond sombre = le noir du logo disparaît */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(26,38,64,.35), 0 0 0 4px rgba(59,111,232,.2);
+  margin: 0 auto;
 }
-.main-wrapper::before {
-  content: "";
+.login-logo {
+  width: 115px;
+  height: 115px;
+  object-fit: contain;
+  mix-blend-mode: screen;            /* fond noir → transparent sur fond navy */
+  filter: brightness(1.1) saturate(1.1);
+}
+
+/* ---- FILIGRANE : logo en arrière-plan du contenu ---- */
+.logo-watermark {
   position: fixed;
-  bottom: -60px;
-  right: -60px;
-  width: 480px;
-  height: 480px;
-  background: url("logo.png") center/contain no-repeat;
-  opacity: .045;             /* très discret, juste visible */
+  bottom: -40px;
+  right: -40px;
+  width: 420px;
+  height: 420px;
+  object-fit: contain;
+  opacity: 0.055;
   pointer-events: none;
   z-index: 0;
-  mix-blend-mode: multiply;
+  mix-blend-mode: multiply;         /* fond noir → invisible sur fond clair */
+  filter: saturate(0) brightness(0.3); /* rend le logo gris neutre, très discret */
+  user-select: none;
 }
-/* Les sections s'affichent au-dessus du filigrane */
+
+/* S'assurer que les onglets sont au-dessus du filigrane */
 .tab-content { position: relative; z-index: 1; }
 
 .sidebar-toggle {
