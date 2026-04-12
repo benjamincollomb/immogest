@@ -1,16 +1,19 @@
 /* ============================================================
-   CONCIERGEPRO — Style.css
-   Design : Utilité Raffinée — Bleu ardoise, gris béton, blanc
+   IMMOGEST — Style.css
+   Design : Utilité Raffinée — Bleu marine, orange ImmoGest, blanc
    ============================================================ */
 
 /* ---------- VARIABLES ---------- */
 :root {
   --navy:       #1a2640;
-  --navy-mid:   #243451;
+  --navy-mid:   #1e2e52;
   --navy-light: #2e4270;
-  --blue:       #3b6fe8;
-  --blue-light: #5585f0;
-  --blue-pale:  #e8eefa;
+  --blue:       #1e5cbf;
+  --blue-light: #2e70e0;
+  --blue-pale:  #e4edfb;
+  --orange:     #e86a1a;
+  --orange-light:#f07c30;
+  --orange-pale: #fff0e6;
   --slate:      #4a5568;
   --slate-mid:  #6b7a94;
   --slate-light:#e2e8f0;
@@ -109,17 +112,43 @@ img { display:block; max-width:100%; }
 .logo {
   display:flex;
   align-items:center;
-  gap:.7rem;
+  gap:.65rem;
   color:var(--white);
 }
-.logo i {
-  font-size:1.4rem;
-  color:var(--blue-light);
+.logo-img {
+  width:38px;
+  height:38px;
+  object-fit:contain;
+  border-radius:6px;
+  background: rgba(255,255,255,.08);
+  padding:2px;
+  flex-shrink:0;
 }
 .logo-text {
-  font-size:1.05rem;
+  font-size:1.1rem;
   font-weight:700;
-  letter-spacing:.02em;
+  letter-spacing:.01em;
+  background: linear-gradient(90deg, #fff 40%, var(--orange-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Topbar brand avec logo */
+.topbar-brand {
+  display:flex;
+  align-items:center;
+  gap:.6rem;
+  flex:1;
+}
+.topbar-logo {
+  width:32px;
+  height:32px;
+  object-fit:contain;
+  display:none; /* visible seulement mobile */
+}
+@media(max-width:768px) {
+  .topbar-logo { display:block; }
 }
 
 .sidebar-toggle {
@@ -159,7 +188,7 @@ img { display:block; max-width:100%; }
 }
 .nav-item i { font-size:1rem; min-width:1.1rem; text-align:center; }
 .nav-item:hover  { background:rgba(255,255,255,.08); color:var(--white); }
-.nav-item.active { background:var(--blue); color:var(--white); }
+.nav-item.active { background: linear-gradient(90deg, var(--orange) 0%, var(--orange-light) 100%); color:var(--white); }
 .nav-item.active i { color:var(--white); }
 
 .badge {
@@ -572,55 +601,136 @@ img { display:block; max-width:100%; }
 .task-actions { display:flex; gap:.4rem; }
 
 /* ============================================================
-   ORDERS TABLE
+   ORDERS CARDS (multi-produits)
    ============================================================ */
-.orders-table-wrap {
+.orders-list {
+  display:flex;
+  flex-direction:column;
+  gap:.85rem;
+}
+
+.order-card {
   background:var(--white);
   border-radius:var(--radius);
   box-shadow:var(--shadow);
-  overflow-x:auto;
+  overflow:hidden;
+  border-left:4px solid transparent;
+  transition:box-shadow var(--transition);
+  animation:fadeIn .2s ease;
 }
-.data-table {
-  width:100%;
-  border-collapse:collapse;
-  font-size:.88rem;
+.order-card:hover { box-shadow:var(--shadow-md); }
+.order-card.status-ordered  { border-color:var(--blue); }
+.order-card.status-pending  { border-color:var(--orange); }
+.order-card.status-received { border-color:var(--low); }
+
+.order-card-header {
+  display:flex;
+  align-items:center;
+  gap:1rem;
+  padding:1rem 1.25rem;
+  cursor:pointer;
+  user-select:none;
 }
-.data-table thead th {
-  background:var(--bg);
-  color:var(--text-light);
+.order-card-header:hover { background:var(--bg); }
+
+.order-header-main { flex:1; min-width:0; }
+.order-supplier {
+  font-size:1rem;
   font-weight:700;
-  font-size:.72rem;
-  text-transform:uppercase;
-  letter-spacing:.06em;
-  padding:.9rem 1.1rem;
-  text-align:left;
-  border-bottom:1px solid var(--border);
+  color:var(--navy);
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+}
+.order-supplier i { color:var(--blue); font-size:.9rem; }
+.order-meta {
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin-top:.35rem;
+  align-items:center;
+}
+.order-meta .order-date {
+  font-family:'DM Mono', monospace;
+  font-size:.75rem;
+  color:var(--text-light);
+}
+
+.order-summary-count {
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:99px;
+  padding:.22rem .65rem;
+  font-size:.75rem;
+  font-weight:700;
+  color:var(--slate);
   white-space:nowrap;
 }
-.data-table tbody tr {
+
+.order-card-actions { display:flex; gap:.3rem; align-items:center; flex-shrink:0; }
+
+.order-expand-btn {
+  width:28px; height:28px;
+  border-radius:50%;
+  border:1.5px solid var(--border);
+  background:none;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-light);
+  font-size:.75rem;
+  transition:all var(--transition);
+  flex-shrink:0;
+}
+.order-expand-btn:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-pale); }
+.order-expand-btn.open { border-color:var(--blue); color:var(--blue); background:var(--blue-pale); }
+.order-expand-btn.open i { transform:rotate(180deg); }
+.order-expand-btn i { transition:transform var(--transition); }
+
+/* Produits dépliables */
+.order-products {
+  display:none;
+  border-top:1px solid var(--border);
+  background:var(--bg);
+}
+.order-products.open { display:block; }
+
+.order-products-header {
+  display:grid;
+  grid-template-columns: 2fr 80px 80px 1fr;
+  gap:.75rem;
+  padding:.5rem 1.25rem;
+  font-size:.7rem;
+  font-weight:700;
+  color:var(--text-light);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  border-bottom:1px solid var(--border);
+  background:var(--white);
+}
+.order-product-row {
+  display:grid;
+  grid-template-columns: 2fr 80px 80px 1fr;
+  gap:.75rem;
+  padding:.7rem 1.25rem;
+  font-size:.88rem;
+  align-items:center;
   border-bottom:1px solid var(--slate-light);
   transition:background var(--transition);
 }
-.data-table tbody tr:last-child { border-bottom:none; }
-.data-table tbody tr:hover { background:var(--bg); }
-.data-table td {
-  padding:.85rem 1.1rem;
-  color:var(--text);
-  vertical-align:middle;
-}
-.data-table td.item-name { font-weight:600; color:var(--navy); }
-.data-table td.td-date {
-  font-family:'DM Mono',monospace;
-  font-size:.8rem;
-  color:var(--text-light);
-}
-.data-table td.td-notes {
-  max-width:200px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  color:var(--text-light);
-  font-size:.82rem;
+.order-product-row:last-child { border-bottom:none; }
+.order-product-row:hover { background:var(--white); }
+.order-product-name { font-weight:600; color:var(--navy); }
+.order-product-qty  { font-family:'DM Mono',monospace; color:var(--text); }
+.order-product-unit { color:var(--text-light); font-size:.82rem; }
+.order-product-notes { color:var(--text-light); font-size:.82rem; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+@media(max-width:580px) {
+  .order-products-header,
+  .order-product-row { grid-template-columns:1fr 60px; }
+  .order-product-row > :nth-child(3),
+  .order-product-row > :nth-child(4),
+  .order-products-header > :nth-child(3),
+  .order-products-header > :nth-child(4) { display:none; }
 }
 
 /* ============================================================

@@ -3,48 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gestion Conciergerie</title>
+  <title>ImmoGest — Gestion Immobilière</title>
   <link rel="stylesheet" href="style.css" />
-  <!-- FontAwesome pour les icônes -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-  <!-- Google Fonts : DM Sans + DM Mono -->
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 </head>
 <body>
 
-  <!-- ======== SIDEBAR ======== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo">
-        <i class="fa-solid fa-building"></i>
-        <span class="logo-text">ConciergePro</span>
+        <img src="logo.png" alt="ImmoGest" class="logo-img"/>
+        <span class="logo-text">ImmoGest</span>
       </div>
-      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Fermer le menu">
+      <button class="sidebar-toggle" id="sidebarToggle">
         <i class="fa-solid fa-bars"></i>
       </button>
     </div>
-
     <nav class="sidebar-nav">
       <a href="#" class="nav-item active" data-tab="dashboard">
-        <i class="fa-solid fa-house-chimney"></i>
-        <span>Tableau de bord</span>
+        <i class="fa-solid fa-house-chimney"></i><span>Tableau de bord</span>
       </a>
       <a href="#" class="nav-item" data-tab="tasks">
-        <i class="fa-solid fa-list-check"></i>
-        <span>Tâches</span>
+        <i class="fa-solid fa-list-check"></i><span>Tâches</span>
         <span class="badge" id="badgeTasks">0</span>
       </a>
       <a href="#" class="nav-item" data-tab="orders">
-        <i class="fa-solid fa-box"></i>
-        <span>Commandes</span>
+        <i class="fa-solid fa-box"></i><span>Commandes</span>
         <span class="badge" id="badgeOrders">0</span>
       </a>
       <a href="#" class="nav-item" data-tab="spaces">
-        <i class="fa-solid fa-car"></i>
-        <span>Places & Apparts</span>
+        <i class="fa-solid fa-car"></i><span>Places & Apparts</span>
       </a>
     </nav>
-
     <div class="sidebar-footer">
       <div class="user-info">
         <div class="user-avatar"><i class="fa-solid fa-user-tie"></i></div>
@@ -56,114 +47,69 @@
     </div>
   </aside>
 
-  <!-- ======== MAIN CONTENT ======== -->
   <div class="main-wrapper">
-
-    <!-- TOP BAR -->
     <header class="topbar">
-      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">
-        <i class="fa-solid fa-bars"></i>
-      </button>
-      <div class="topbar-title" id="topbarTitle">Tableau de bord</div>
+      <button class="mobile-menu-btn" id="mobileMenuBtn"><i class="fa-solid fa-bars"></i></button>
+      <div class="topbar-brand">
+        <img src="logo.png" alt="ImmoGest" class="topbar-logo"/>
+        <div class="topbar-title" id="topbarTitle">Tableau de bord</div>
+      </div>
       <div class="topbar-right">
         <div class="date-display" id="dateDisplay"></div>
       </div>
     </header>
 
-    <!-- ======================================================
-         TAB: DASHBOARD
-    ====================================================== -->
+    <!-- DASHBOARD -->
     <section class="tab-content active" id="tab-dashboard">
       <div class="page-header">
-        <h1>Vue d'ensemble</h1>
-        <p class="subtitle">Résumé de votre activité</p>
+        <div><h1>Vue d'ensemble</h1><p class="subtitle">Résumé de votre activité</p></div>
       </div>
-
-      <!-- KPI Cards -->
       <div class="kpi-grid">
         <div class="kpi-card kpi-tasks">
           <div class="kpi-icon"><i class="fa-solid fa-hourglass-half"></i></div>
-          <div class="kpi-body">
-            <div class="kpi-value" id="kpiPending">0</div>
-            <div class="kpi-label">Tâches en attente</div>
-          </div>
+          <div class="kpi-body"><div class="kpi-value" id="kpiPending">0</div><div class="kpi-label">Tâches en attente</div></div>
         </div>
         <div class="kpi-card kpi-inprogress">
           <div class="kpi-icon"><i class="fa-solid fa-spinner"></i></div>
-          <div class="kpi-body">
-            <div class="kpi-value" id="kpiInProgress">0</div>
-            <div class="kpi-label">En cours</div>
-          </div>
+          <div class="kpi-body"><div class="kpi-value" id="kpiInProgress">0</div><div class="kpi-label">En cours</div></div>
         </div>
         <div class="kpi-card kpi-orders">
           <div class="kpi-icon"><i class="fa-solid fa-truck"></i></div>
-          <div class="kpi-body">
-            <div class="kpi-value" id="kpiOrders">0</div>
-            <div class="kpi-label">Commandes actives</div>
-          </div>
+          <div class="kpi-body"><div class="kpi-value" id="kpiOrders">0</div><div class="kpi-label">Commandes actives</div></div>
         </div>
         <div class="kpi-card kpi-spaces">
           <div class="kpi-icon"><i class="fa-solid fa-square-parking"></i></div>
-          <div class="kpi-body">
-            <div class="kpi-value" id="kpiSpaces">0</div>
-            <div class="kpi-label">Places libres</div>
-          </div>
+          <div class="kpi-body"><div class="kpi-value" id="kpiSpaces">0</div><div class="kpi-label">Places libres</div></div>
         </div>
         <div class="kpi-card kpi-apts">
           <div class="kpi-icon"><i class="fa-solid fa-door-open"></i></div>
-          <div class="kpi-body">
-            <div class="kpi-value" id="kpiApts">0</div>
-            <div class="kpi-label">Appartements libres</div>
-          </div>
+          <div class="kpi-body"><div class="kpi-value" id="kpiApts">0</div><div class="kpi-label">Appartements libres</div></div>
         </div>
       </div>
-
-      <!-- Building grid + Today's tasks -->
       <div class="dashboard-grid">
-
-        <!-- Buildings overview -->
         <div class="card">
-          <div class="card-header">
-            <i class="fa-solid fa-building-columns"></i>
-            <h2>Mes immeubles</h2>
-          </div>
-          <div class="buildings-grid" id="buildingsGrid">
-            <!-- Généré par JS -->
-          </div>
+          <div class="card-header"><i class="fa-solid fa-building-columns"></i><h2>Mes immeubles</h2></div>
+          <div class="buildings-grid" id="buildingsGrid"></div>
         </div>
-
-        <!-- Today's urgent tasks -->
         <div class="card">
-          <div class="card-header">
-            <i class="fa-solid fa-fire"></i>
-            <h2>Priorités du moment</h2>
-          </div>
+          <div class="card-header"><i class="fa-solid fa-fire"></i><h2>Priorités du moment</h2></div>
           <div class="today-tasks" id="todayTasks">
-            <p class="empty-msg"><i class="fa-regular fa-circle-check"></i> Aucune tâche haute priorité</p>
+            <p class="empty-msg"><i class="fa-regular fa-circle-check"></i>Aucune tâche haute priorité</p>
           </div>
         </div>
-
       </div>
     </section>
 
-    <!-- ======================================================
-         TAB: TÂCHES
-    ====================================================== -->
+    <!-- TÂCHES -->
     <section class="tab-content" id="tab-tasks">
       <div class="page-header">
         <h1>Tâches</h1>
-        <button class="btn btn-primary" id="btnAddTask">
-          <i class="fa-solid fa-plus"></i> Nouvelle tâche
-        </button>
+        <button class="btn btn-primary" id="btnAddTask"><i class="fa-solid fa-plus"></i> Nouvelle tâche</button>
       </div>
-
-      <!-- Filtres -->
       <div class="filters-bar">
         <div class="filter-group">
           <label for="filterTaskBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
-          <select id="filterTaskBuilding">
-            <option value="">Tous</option>
-          </select>
+          <select id="filterTaskBuilding"><option value="">Tous</option></select>
         </div>
         <div class="filter-group">
           <label for="filterTaskStatus"><i class="fa-solid fa-circle-half-stroke"></i> Statut</label>
@@ -188,24 +134,15 @@
           <input type="text" id="filterTaskSearch" placeholder="Rechercher une tâche…"/>
         </div>
       </div>
-
-      <div class="tasks-list" id="tasksList">
-        <!-- Généré par JS -->
-      </div>
+      <div class="tasks-list" id="tasksList"></div>
     </section>
 
-    <!-- ======================================================
-         TAB: COMMANDES
-    ====================================================== -->
+    <!-- COMMANDES (multi-produits) -->
     <section class="tab-content" id="tab-orders">
       <div class="page-header">
         <h1>Commandes</h1>
-        <button class="btn btn-primary" id="btnAddOrder">
-          <i class="fa-solid fa-plus"></i> Nouvelle commande
-        </button>
+        <button class="btn btn-primary" id="btnAddOrder"><i class="fa-solid fa-plus"></i> Nouvelle commande</button>
       </div>
-
-      <!-- Filtres commandes -->
       <div class="filters-bar">
         <div class="filter-group">
           <label for="filterOrderStatus"><i class="fa-solid fa-circle-half-stroke"></i> Statut</label>
@@ -216,111 +153,68 @@
             <option value="received">Reçu</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label for="filterOrderBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
+          <select id="filterOrderBuilding"><option value="">Tous</option></select>
+        </div>
         <div class="filter-group search-group">
           <label for="filterOrderSearch"><i class="fa-solid fa-magnifying-glass"></i> Recherche</label>
-          <input type="text" id="filterOrderSearch" placeholder="Article, fournisseur…"/>
+          <input type="text" id="filterOrderSearch" placeholder="Fournisseur, produit…"/>
         </div>
       </div>
-
-      <div class="orders-table-wrap">
-        <table class="data-table" id="ordersTable">
-          <thead>
-            <tr>
-              <th>Article</th>
-              <th>Fournisseur</th>
-              <th>Date</th>
-              <th>Statut</th>
-              <th>Immeuble</th>
-              <th>Notes</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="ordersBody">
-            <!-- Généré par JS -->
-          </tbody>
-        </table>
-        <p class="empty-msg hidden" id="ordersEmpty"><i class="fa-solid fa-box-open"></i> Aucune commande trouvée</p>
-      </div>
+      <div class="orders-list" id="ordersList"></div>
     </section>
 
-    <!-- ======================================================
-         TAB: PLACES & APPARTEMENTS
-    ====================================================== -->
+    <!-- PLACES & APPARTEMENTS -->
     <section class="tab-content" id="tab-spaces">
       <div class="page-header">
         <h1>Places & Appartements</h1>
         <div class="btn-group">
-          <button class="btn btn-primary" id="btnAddSpace">
-            <i class="fa-solid fa-square-parking"></i> Nouvelle place
-          </button>
-          <button class="btn btn-secondary" id="btnAddApt">
-            <i class="fa-solid fa-door-open"></i> Nouvel appartement
-          </button>
+          <button class="btn btn-primary" id="btnAddSpace"><i class="fa-solid fa-square-parking"></i> Nouvelle place</button>
+          <button class="btn btn-secondary" id="btnAddApt"><i class="fa-solid fa-door-open"></i> Nouvel appartement</button>
         </div>
       </div>
-
       <div class="filter-group" style="margin-bottom:1.5rem">
         <label for="filterSpaceBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
-        <select id="filterSpaceBuilding" style="min-width:180px">
-          <option value="">Tous</option>
-        </select>
+        <select id="filterSpaceBuilding" style="min-width:180px"><option value="">Tous</option></select>
       </div>
-
       <div class="spaces-grid">
-        <!-- Parking -->
         <div class="card">
           <div class="card-header">
             <i class="fa-solid fa-square-parking"></i>
             <h2>Places de parking libres</h2>
             <span class="count-badge" id="countSpaces">0</span>
           </div>
-          <div class="spaces-list" id="spacesList">
-            <p class="empty-msg"><i class="fa-solid fa-circle-check"></i> Aucune place libre</p>
-          </div>
+          <div class="spaces-list" id="spacesList"><p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucune place libre</p></div>
         </div>
-
-        <!-- Appartements -->
         <div class="card">
           <div class="card-header">
             <i class="fa-solid fa-door-open"></i>
             <h2>Appartements libres</h2>
             <span class="count-badge" id="countApts">0</span>
           </div>
-          <div class="spaces-list" id="aptsList">
-            <p class="empty-msg"><i class="fa-solid fa-circle-check"></i> Aucun appartement libre</p>
-          </div>
+          <div class="spaces-list" id="aptsList"><p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucun appartement libre</p></div>
         </div>
       </div>
     </section>
+  </div>
 
-  </div><!-- /main-wrapper -->
-
-  <!-- ======================================================
-       MODAL GÉNÉRIQUE
-  ====================================================== -->
+  <!-- MODAL -->
   <div class="modal-overlay hidden" id="modalOverlay">
     <div class="modal" id="modal">
       <div class="modal-header">
         <h3 id="modalTitle">Titre</h3>
-        <button class="modal-close" id="modalClose" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+        <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="modal-body" id="modalBody">
-        <!-- Contenu dynamique -->
-      </div>
+      <div class="modal-body" id="modalBody"></div>
       <div class="modal-footer">
         <button class="btn btn-ghost" id="modalCancel">Annuler</button>
-        <button class="btn btn-primary" id="modalSave">
-          <i class="fa-solid fa-floppy-disk"></i> Enregistrer
-        </button>
+        <button class="btn btn-primary" id="modalSave"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
       </div>
     </div>
   </div>
 
-  <!-- ======================================================
-       TOAST NOTIFICATIONS
-  ====================================================== -->
   <div class="toast-container" id="toastContainer"></div>
-
   <script src="script.js"></script>
 </body>
 </html>
