@@ -14,7 +14,12 @@ let currentUser = null; // utilisateur Firebase connecté
 
 function initFirebase() {
   try {
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const config = window.firebaseConfig;
+    if (!config || config.apiKey.startsWith("COLLE")) {
+      console.error("❌ firebase-config.js non configuré");
+      return false;
+    }
+    if (!firebase.apps.length) firebase.initializeApp(config);
     db      = firebase.firestore();
     auth    = firebase.auth();
     storage = firebase.storage();
