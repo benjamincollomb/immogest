@@ -425,7 +425,7 @@ function renderBuildingsRenameGrid() {
 }
 
 /** Enregistrer les noms d'immeubles */
-document.getElementById("btnSaveBuildings").addEventListener("click", () => {
+document.getElementById("btnSaveBuildings").addEventListener("click", async () => {
   const inputs = document.querySelectorAll(".building-rename-input");
   const newNames = [];
   let hasEmpty = false;
@@ -443,7 +443,7 @@ document.getElementById("btnSaveBuildings").addEventListener("click", () => {
 });
 
 /** Réinitialiser les noms */
-document.getElementById("btnResetBuildings").addEventListener("click", () => {
+document.getElementById("btnResetBuildings").addEventListener("click", async () => {
   if (!confirm("Remettre les noms par défaut (Immeuble A … I) ?")) return;
   saveBuildings([...DEFAULT_BUILDINGS]);
   renderBuildingsRenameGrid();
@@ -566,7 +566,7 @@ function closeModal(){
 document.getElementById("modalClose").addEventListener("click",closeModal);
 document.getElementById("modalCancel").addEventListener("click",closeModal);
 modalOverlay.addEventListener("click",e=>{ if(e.target===modalOverlay) closeModal(); });
-modalSaveBtn.addEventListener("click",()=>{ if(modalSaveCallback) modalSaveCallback(); });
+modalSaveBtn.addEventListener("click", async ()=>{ if(modalSaveCallback) await modalSaveCallback(); });
 function mval(id){ const e=document.getElementById(id); return e?e.value.trim():""; }
 
 /* ============================================================
@@ -661,9 +661,9 @@ function renderTasks(){
       </div>
     </div>`).join("");
 
-  c.querySelectorAll(".task-status-btn").forEach(b=>b.addEventListener("click",()=>toggleTaskStatus(b.dataset.id)));
-  c.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click",()=>editTask(b.dataset.id)));
-  c.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click",()=>deleteTask(b.dataset.id)));
+  c.querySelectorAll(".task-status-btn").forEach(b=>b.addEventListener("click", async ()=>toggleTaskStatus(b.dataset.id)));
+  c.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click", async ()=>editTask(b.dataset.id)));
+  c.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click", async ()=>deleteTask(b.dataset.id)));
   document.getElementById("badgeTasks").textContent=tasks.filter(t=>t.status!=="done").length;
 }
 
@@ -704,7 +704,7 @@ function taskFormHTML(t={}){
     </div>`;
 }
 
-document.getElementById("btnAddTask").addEventListener("click",()=>{
+document.getElementById("btnAddTask").addEventListener("click", async ()=>{
   openModal("Nouvelle tâche",taskFormHTML(),()=>{
     const title=mval("fTitle");
     if(!title){showToast("Le titre est obligatoire.","error");return;}
@@ -819,9 +819,9 @@ function renderOrders(){
       if(btn) btn.classList.toggle("open");
     });
   });
-  c.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();editOrder(b.dataset.id);}));
-  c.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();deleteOrder(b.dataset.id);}));
-  c.querySelectorAll(".pdf-btn").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();exportOrderPDF(b.dataset.id);}));
+  c.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click", async e=>{e.stopPropagation(); await editOrder(b.dataset.id);}));
+  c.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click", async e=>{e.stopPropagation(); await deleteOrder(b.dataset.id);}));
+  c.querySelectorAll(".pdf-btn").forEach(b=>b.addEventListener("click", async e=>{e.stopPropagation(); await exportOrderPDF(b.dataset.id);}));
   document.getElementById("badgeOrders").textContent=orders.filter(o=>o.status==="ordered"||o.status==="pending").length;
 }
 
@@ -925,7 +925,7 @@ function bindRemoveButtons(){
   });
 }
 
-document.getElementById("btnAddOrder").addEventListener("click",()=>{
+document.getElementById("btnAddOrder").addEventListener("click", async ()=>{
   openModal("Nouvelle commande",orderFormHTML(),()=>{
     const supplier=mval("fSupplier");
     if(!supplier){showToast("Le fournisseur est obligatoire.","error");return;}
@@ -990,8 +990,8 @@ function renderSpaces(){
           <button class="btn-icon delete" data-id="${s.id}"><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>`).join("");
-    sl.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click",()=>editSpace(b.dataset.id)));
-    sl.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click",()=>deleteSpace(b.dataset.id)));
+    sl.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click", async ()=>editSpace(b.dataset.id)));
+    sl.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click", async ()=>deleteSpace(b.dataset.id)));
   }
 
   const al=document.getElementById("aptsList");
@@ -1012,8 +1012,8 @@ function renderSpaces(){
           <button class="btn-icon delete" data-id="${a.id}"><i class="fa-solid fa-trash"></i></button>
         </div>
       </div>`).join("");
-    al.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click",()=>editApt(b.dataset.id)));
-    al.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click",()=>deleteApt(b.dataset.id)));
+    al.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click", async ()=>editApt(b.dataset.id)));
+    al.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click", async ()=>deleteApt(b.dataset.id)));
   }
 }
 
@@ -1037,7 +1037,7 @@ function spaceFormHTML(s={}){
       <input id="fSNotes" type="text" placeholder="Ex : Handicapé, moto…" value="${escHtml(s.notes||"")}"/>
     </div>`;
 }
-document.getElementById("btnAddSpace").addEventListener("click",()=>{
+document.getElementById("btnAddSpace").addEventListener("click", async ()=>{
   openModal("Nouvelle place de parking",spaceFormHTML(),()=>{
     const name=mval("fSName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     const newSpace={id:uid(),name,building:mval("fSBuilding"),type:mval("fSType"),notes:mval("fSNotes")};
@@ -1080,7 +1080,7 @@ function aptFormHTML(a={}){
       <textarea id="fANotes" placeholder="Loyer, disponibilité…">${escHtml(a.notes||"")}</textarea>
     </div>`;
 }
-document.getElementById("btnAddApt").addEventListener("click",()=>{
+document.getElementById("btnAddApt").addEventListener("click", async ()=>{
   openModal("Nouvel appartement libre",aptFormHTML(),()=>{
     const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     const newApt={id:uid(),name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")};
