@@ -1672,3 +1672,23 @@ img { display:block; max-width:100%; }
   transition: border-color var(--transition);
 }
 .user-info:hover .user-avatar { border-color: var(--orange-light); }
+
+/* ============================================================
+   LIEN DE BASCULE Connexion ↔ Inscription
+   ============================================================ */
+.login-switch {
+  text-align: center;
+  font-size: .82rem;
+  color: rgba(255,255,255,.45);
+  margin-top: .5rem;
+}
+.login-switch a {
+  color: var(--orange-light);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.login-switch a:hover {
+  color: #fff;
+  text-decoration: underline;
+}

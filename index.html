@@ -28,12 +28,6 @@
       <div class="login-app-name">ImmoGest</div>
       <div class="login-subtitle">Gestion Immobilière</div>
 
-      <!-- Onglets -->
-      <div class="login-tabs">
-        <button class="login-tab active" id="tabLogin">Se connecter</button>
-        <button class="login-tab" id="tabRegister">S'inscrire</button>
-      </div>
-
       <!-- ===== FORMULAIRE CONNEXION ===== -->
       <form class="login-form" id="loginForm" autocomplete="off">
         <div class="login-field">
@@ -60,6 +54,7 @@
         <button type="submit" class="login-btn">
           <i class="fa-solid fa-arrow-right-to-bracket"></i> Se connecter
         </button>
+        <p class="login-switch">Pas encore de compte ? <a href="#" id="goToRegister">Créer un compte</a></p>
       </form>
 
       <!-- ===== FORMULAIRE INSCRIPTION ===== -->
@@ -110,6 +105,7 @@
         <button type="submit" class="login-btn">
           <i class="fa-solid fa-user-plus"></i> Créer mon compte
         </button>
+        <p class="login-switch">Déjà un compte ? <a href="#" id="goToLogin">Se connecter</a></p>
       </form>
 
       <div class="login-footer">ImmoGest © 2025 — Accès sécurisé</div>

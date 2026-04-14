@@ -111,18 +111,27 @@ function authErrFR(code) {
   return map[code] || "Erreur : " + code;
 }
 
-/* ---- Onglets Connexion / Inscription ---- */
-document.getElementById("tabLogin").addEventListener("click", () => {
-  document.getElementById("tabLogin").classList.add("active");
-  document.getElementById("tabRegister").classList.remove("active");
+/* ---- Basculer entre Connexion ↔ Inscription via liens texte ---- */
+function showLoginForm() {
   loginForm.classList.remove("hidden");
   registerForm.classList.add("hidden");
-});
-document.getElementById("tabRegister").addEventListener("click", () => {
-  document.getElementById("tabRegister").classList.add("active");
-  document.getElementById("tabLogin").classList.remove("active");
+  loginError.classList.add("hidden");
+  document.getElementById("loginEmail").focus();
+}
+function showRegisterForm() {
   registerForm.classList.remove("hidden");
   loginForm.classList.add("hidden");
+  registerError.classList.add("hidden");
+  document.getElementById("registerName").focus();
+}
+
+document.getElementById("goToRegister").addEventListener("click", e => {
+  e.preventDefault();
+  showRegisterForm();
+});
+document.getElementById("goToLogin").addEventListener("click", e => {
+  e.preventDefault();
+  showLoginForm();
 });
 
 /* ---- Connexion ---- */
