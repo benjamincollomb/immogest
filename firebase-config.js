@@ -1,11 +1,7 @@
 /* ============================================================
-   IMMOGEST — firebase-config.js
-   ⚠️  NE PAS PARTAGER PUBLIQUEMENT
+   IMMOGEST — firebase-config.js  ⚠️ NE PAS PARTAGER
    ============================================================ */
-
-// On expose la config sur window pour qu'elle soit accessible
-// depuis script.js chargé en tant que module ES
-window.firebaseConfig = {
+const firebaseConfig = {
   apiKey:            "AIzaSyBHoXJyMgPZisDVFzzen9v-eefbEYsoYww",
   authDomain:        "immogest-e11ff.firebaseapp.com",
   projectId:         "immogest-e11ff",

@@ -1,8 +1,10 @@
+(async () => {
+"use strict";
+
 /* ============================================================
    IMMOGEST — script.js
    Firebase Auth + Firestore + Storage
    ============================================================ */
-"use strict";
 
 /* ============================================================
    1. FIREBASE — Initialisation
@@ -14,12 +16,7 @@ let currentUser = null; // utilisateur Firebase connecté
 
 function initFirebase() {
   try {
-    const config = window.firebaseConfig;
-    if (!config || config.apiKey.startsWith("COLLE")) {
-      console.error("❌ firebase-config.js non configuré");
-      return false;
-    }
-    if (!firebase.apps.length) firebase.initializeApp(config);
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     db      = firebase.firestore();
     auth    = firebase.auth();
     storage = firebase.storage();
@@ -290,7 +287,7 @@ function updateAvatarUI(photoURL, name) {
 /* ============================================================
    7. onAuthStateChanged — Point d'entrée principal
    ============================================================ */
-function startAuthListener() {
+async function startAuthListener() {
   auth.onAuthStateChanged(async user => {
     if (user) {
       // Utilisateur connecté
@@ -718,7 +715,7 @@ document.getElementById("btnAddTask").addEventListener("click", async ()=>{
     showToast("Tâche ajoutée !","success");
   });
 });
-function editTask(id){
+async function editTask(id){
   const t=tasks.find(t=>t.id===id); if(!t)return;
   openModal("Modifier la tâche",taskFormHTML(t), async ()=>{
     const title=mval("fTitle");
@@ -728,7 +725,7 @@ function editTask(id){
     showToast("Tâche mise à jour.","success");
   });
 }
-function deleteTask(id){
+async function deleteTask(id){
   if(!confirm("Supprimer cette tâche ?"))return;
   await fsDelete("tasks",id);
   showToast("Tâche supprimée.","info");
@@ -758,7 +755,7 @@ function getFilteredOrders(){
   return list;
 }
 
-function renderOrders(){
+async function renderOrders(){
   const list=getFilteredOrders();
   const c=document.getElementById("ordersList");
   if(!list.length){
@@ -942,7 +939,7 @@ document.getElementById("btnAddOrder").addEventListener("click", async ()=>{
   });
   setTimeout(bindOrderForm,0);
 });
-function editOrder(id){
+async function editOrder(id){
   const o=orders.find(o=>o.id===id); if(!o)return;
   openModal("Modifier la commande",orderFormHTML(o), async ()=>{
     const supplier=mval("fSupplier");
@@ -955,7 +952,7 @@ function editOrder(id){
   });
   setTimeout(bindOrderForm,0);
 }
-function deleteOrder(id){
+async function deleteOrder(id){
   if(!confirm("Supprimer cette commande ?"))return;
   await fsDelete("orders",id);
   showToast("Commande supprimée.","info");
@@ -1050,7 +1047,7 @@ document.getElementById("btnAddSpace").addEventListener("click", async ()=>{
     showToast("Place ajoutée !","success");
   });
 });
-function editSpace(id){
+async function editSpace(id){
   const s=spaces.find(s=>s.id===id); if(!s)return;
   openModal("Modifier la place",spaceFormHTML(s), async ()=>{
     const name=mval("fSName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
@@ -1059,7 +1056,7 @@ function editSpace(id){
     showToast("Place mise à jour.","success");
   });
 }
-function deleteSpace(id){
+async function deleteSpace(id){
   if(!confirm("Supprimer cette place ?"))return;
   await fsDelete("spaces",id);
   showToast("Place supprimée.","info");
@@ -1093,7 +1090,7 @@ document.getElementById("btnAddApt").addEventListener("click", async ()=>{
     showToast("Appartement ajouté !","success");
   });
 });
-function editApt(id){
+async function editApt(id){
   const a=apts.find(a=>a.id===id); if(!a)return;
   openModal("Modifier l'appartement",aptFormHTML(a), async ()=>{
     const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
@@ -1102,7 +1099,7 @@ function editApt(id){
     showToast("Appartement mis à jour.","success");
   });
 }
-function deleteApt(id){
+async function deleteApt(id){
   if(!confirm("Supprimer cet appartement ?"))return;
   await fsDelete("apts",id);
   showToast("Appartement supprimé.","info");
@@ -1438,3 +1435,5 @@ const btnExportAll = document.getElementById("btnExportAllPDF");
 if (btnExportAll) {
   btnExportAll.addEventListener("click", exportAllOrdersPDF);
 }
+
+})();
