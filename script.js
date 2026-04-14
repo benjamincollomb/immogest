@@ -1,182 +1,342 @@
 /* ============================================================
    IMMOGEST — script.js
-   Authentification + Administration + Firebase Firestore
+   Firebase Auth + Firestore + Storage
    ============================================================ */
 "use strict";
 
 /* ============================================================
    1. FIREBASE — Initialisation
    ============================================================ */
-
-// firebaseConfig est défini dans firebase-config.js
-let db = null;
+let db      = null;
+let auth    = null;
+let storage = null;
+let currentUser = null; // utilisateur Firebase connecté
 
 function initFirebase() {
   try {
-    if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-    }
-    db = firebase.firestore();
-    console.log("✅ Firebase Firestore connecté");
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    db      = firebase.firestore();
+    auth    = firebase.auth();
+    storage = firebase.storage();
+    console.log("✅ Firebase connecté");
     return true;
-  } catch (e) {
-    console.error("❌ Erreur Firebase :", e);
+  } catch(e) {
+    console.error("❌ Firebase:", e);
     return false;
   }
 }
 
-/** Références aux collections Firestore */
 function col(name) { return db.collection(name); }
 
 /* ============================================================
-   2. MOT DE PASSE (stocké dans Firestore doc "config/auth")
-      + localStorage comme cache local
-   ============================================================ */
-const DEFAULT_PASSWORD = "immogest";
-
-function hashString(str) {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h.toString(16);
-}
-
-// Le hash est lu depuis localStorage (cache) ou Firestore
-function getStoredHash() {
-  return localStorage.getItem("ig_password") || hashString(DEFAULT_PASSWORD);
-}
-async function setStoredHash(newPw) {
-  const h = hashString(newPw);
-  localStorage.setItem("ig_password", h);
-  // Sauvegarder aussi dans Firestore pour la synchro multi-appareils
-  if (db) await db.doc("config/auth").set({ passwordHash: h });
-}
-async function syncPasswordFromFirestore() {
-  if (!db) return;
-  try {
-    const snap = await db.doc("config/auth").get();
-    if (snap.exists && snap.data().passwordHash) {
-      localStorage.setItem("ig_password", snap.data().passwordHash);
-    }
-  } catch(e) { console.warn("Sync password:", e); }
-}
-function checkPassword(input) {
-  return hashString(input) === getStoredHash();
-}
-
-/* ============================================================
-   3. SESSION
-   ============================================================ */
-function isLoggedIn()  { return sessionStorage.getItem("ig_session") === "1"; }
-function setSession()  { sessionStorage.setItem("ig_session", "1"); }
-function clearSession(){ sessionStorage.removeItem("ig_session"); }
-
-/* ============================================================
-   4. IMMEUBLES — stockés dans Firestore doc "config/buildings"
+   2. IMMEUBLES — Firestore
    ============================================================ */
 const DEFAULT_BUILDINGS = [
   "Immeuble A","Immeuble B","Immeuble C",
   "Immeuble D","Immeuble E","Immeuble F",
   "Immeuble G","Immeuble H","Immeuble I"
 ];
-
 let BUILDINGS = [...DEFAULT_BUILDINGS];
 
 async function loadBuildings() {
-  if (!db) return;
   try {
     const snap = await db.doc("config/buildings").get();
-    if (snap.exists && Array.isArray(snap.data().list) && snap.data().list.length === 9) {
+    if (snap.exists && Array.isArray(snap.data().list) && snap.data().list.length === 9)
       BUILDINGS = snap.data().list;
-    }
   } catch(e) { console.warn("loadBuildings:", e); }
 }
-
 async function saveBuildings(arr) {
   BUILDINGS = arr;
-  if (db) {
-    try { await db.doc("config/buildings").set({ list: arr }); }
-    catch(e) { console.error("saveBuildings:", e); }
-  }
+  if (db) await db.doc("config/buildings").set({ list: arr });
 }
 
 /* ============================================================
-   5. DONNÉES EN MÉMOIRE (mis à jour par les listeners Firestore)
+   3. DONNÉES EN MÉMOIRE
    ============================================================ */
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
-let tasks  = [];
-let orders = [];
-let spaces = [];
-let apts   = [];
-
-// Listeners actifs (pour pouvoir les détacher si besoin)
+let tasks=[], orders=[], spaces=[], apts=[];
 let unsubTasks=null, unsubOrders=null, unsubSpaces=null, unsubApts=null;
 
-/**
- * Démarre les écouteurs temps réel Firestore.
- * À chaque modification dans la BD → les tableaux locaux sont mis à jour
- * et l'interface est re-rendue automatiquement.
- */
 function startListeners() {
-  // --- TÂCHES ---
-  unsubTasks = col("tasks").onSnapshot(snap => {
-    tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderDashboard();
-    if (document.getElementById("tab-tasks").classList.contains("active")) renderTasks();
-  }, err => console.error("tasks listener:", err));
+  if(unsubTasks)  unsubTasks();
+  if(unsubOrders) unsubOrders();
+  if(unsubSpaces) unsubSpaces();
+  if(unsubApts)   unsubApts();
 
-  // --- COMMANDES ---
-  unsubOrders = col("orders").onSnapshot(snap => {
-    orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderDashboard();
-    if (document.getElementById("tab-orders").classList.contains("active")) renderOrders();
-  }, err => console.error("orders listener:", err));
-
-  // --- PLACES ---
-  unsubSpaces = col("spaces").onSnapshot(snap => {
-    spaces = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderDashboard();
-    if (document.getElementById("tab-spaces").classList.contains("active")) renderSpaces();
-  }, err => console.error("spaces listener:", err));
-
-  // --- APPARTEMENTS ---
-  unsubApts = col("apts").onSnapshot(snap => {
-    apts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderDashboard();
-    if (document.getElementById("tab-spaces").classList.contains("active")) renderSpaces();
-  }, err => console.error("apts listener:", err));
+  unsubTasks  = col("tasks" ).onSnapshot(s=>{ tasks  = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-tasks" ).classList.contains("active")) renderTasks();  });
+  unsubOrders = col("orders").onSnapshot(s=>{ orders = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-orders").classList.contains("active")) renderOrders(); });
+  unsubSpaces = col("spaces").onSnapshot(s=>{ spaces = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); });
+  unsubApts   = col("apts"  ).onSnapshot(s=>{ apts   = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); });
 }
 
-/* ---- Opérations CRUD Firestore ---- */
-
-/** Ajoute un document dans une collection Firestore */
-async function fsAdd(colName, data) {
-  const { id, ...rest } = data;            // l'id Firestore sera généré automatiquement
-  const ref = await col(colName).doc(id).set(rest);
-  return id;
-}
-
-/** Met à jour un document existant */
-async function fsUpdate(colName, id, data) {
-  const { id: _id, ...rest } = data;
-  await col(colName).doc(id).set(rest, { merge: true });
-}
-
-/** Supprime un document */
-async function fsDelete(colName, id) {
-  await col(colName).doc(id).delete();
-}
+async function fsAdd(col_name, data)              { const {id,...r}=data; await col(col_name).doc(id).set(r); return id; }
+async function fsUpdate(col_name, id, data)       { const {id:_,...r}=data; await col(col_name).doc(id).set(r,{merge:true}); }
+async function fsDelete(col_name, id)             { await col(col_name).doc(id).delete(); }
 
 /* ============================================================
-   6. LABELS
+   4. LABELS
    ============================================================ */
 const STATUS_TASK_LABELS  = { todo:"À faire", inprogress:"En cours", done:"Terminé" };
 const PRIORITY_LABELS     = { high:"Haute", medium:"Moyenne", low:"Basse" };
 const STATUS_ORDER_LABELS = { ordered:"Commandé", pending:"En attente", received:"Reçu" };
 const TYPE_SPACE_LABELS   = { indoor:"Intérieur", outdoor:"Extérieur" };
+
+/* ============================================================
+   5. INTERFACE — Login / Logout
+   ============================================================ */
+const loginScreen   = document.getElementById("loginScreen");
+const loginForm     = document.getElementById("loginForm");
+const registerForm  = document.getElementById("registerForm");
+const loginError    = document.getElementById("loginError");
+const loginErrorMsg = document.getElementById("loginErrorMsg");
+const registerError = document.getElementById("registerError");
+const registerErrMsg= document.getElementById("registerErrorMsg");
+
+function showLogin()  { loginScreen.classList.remove("hidden"); }
+function hideLogin()  { loginScreen.classList.add("hidden"); }
+
+/** Traduction des erreurs Firebase Auth en français */
+function authErrFR(code) {
+  const map = {
+    "auth/invalid-email":            "Adresse e-mail invalide.",
+    "auth/user-not-found":           "Aucun compte avec cet e-mail.",
+    "auth/wrong-password":           "Mot de passe incorrect.",
+    "auth/email-already-in-use":     "Cet e-mail est déjà utilisé.",
+    "auth/weak-password":            "Le mot de passe doit faire au moins 6 caractères.",
+    "auth/too-many-requests":        "Trop de tentatives. Réessayez plus tard.",
+    "auth/network-request-failed":   "Erreur réseau. Vérifie ta connexion.",
+    "auth/invalid-credential":       "Email ou mot de passe incorrect.",
+  };
+  return map[code] || "Erreur : " + code;
+}
+
+/* ---- Onglets Connexion / Inscription ---- */
+document.getElementById("tabLogin").addEventListener("click", () => {
+  document.getElementById("tabLogin").classList.add("active");
+  document.getElementById("tabRegister").classList.remove("active");
+  loginForm.classList.remove("hidden");
+  registerForm.classList.add("hidden");
+});
+document.getElementById("tabRegister").addEventListener("click", () => {
+  document.getElementById("tabRegister").classList.add("active");
+  document.getElementById("tabLogin").classList.remove("active");
+  registerForm.classList.remove("hidden");
+  loginForm.classList.add("hidden");
+});
+
+/* ---- Connexion ---- */
+loginForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  loginError.classList.add("hidden");
+  const email = document.getElementById("loginEmail").value.trim();
+  const pw    = document.getElementById("loginPassword").value;
+  if (!email || !pw) return;
+
+  const btn = loginForm.querySelector(".login-btn");
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Connexion…`;
+
+  try {
+    await auth.signInWithEmailAndPassword(email, pw);
+    // onAuthStateChanged gère la suite
+  } catch(err) {
+    loginError.classList.remove("hidden");
+    loginErrorMsg.textContent = authErrFR(err.code);
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fa-solid fa-arrow-right-to-bracket"></i> Se connecter`;
+  }
+});
+
+/* ---- Toggle visibilité mot de passe connexion ---- */
+document.getElementById("loginTogglePw").addEventListener("click", () => {
+  const inp = document.getElementById("loginPassword");
+  const ico = document.getElementById("loginEyeIcon");
+  if(inp.type==="password"){ inp.type="text"; ico.className="fa-solid fa-eye-slash"; }
+  else { inp.type="password"; ico.className="fa-solid fa-eye"; }
+});
+
+/* ---- Aperçu photo dans le formulaire d'inscription ---- */
+let registerAvatarFile = null;
+document.getElementById("registerAvatarInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  registerAvatarFile = file;
+  const prev = document.getElementById("registerAvatarPreview");
+  const reader = new FileReader();
+  reader.onload = ev => {
+    prev.innerHTML = `<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`;
+  };
+  reader.readAsDataURL(file);
+});
+
+/* ---- Inscription ---- */
+registerForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  registerError.classList.add("hidden");
+
+  const name    = document.getElementById("registerName").value.trim();
+  const email   = document.getElementById("registerEmail").value.trim();
+  const pw      = document.getElementById("registerPassword").value;
+  const confirm = document.getElementById("registerConfirm").value;
+
+  if (!name)            { showRegisterError("Le nom est obligatoire.");                return; }
+  if (!email)           { showRegisterError("L'e-mail est obligatoire.");              return; }
+  if (pw.length < 6)   { showRegisterError("Mot de passe trop court (min. 6 car.)."); return; }
+  if (pw !== confirm)  { showRegisterError("Les mots de passe ne correspondent pas."); return; }
+
+  const btn = registerForm.querySelector(".login-btn");
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Création…`;
+
+  try {
+    // Créer l'utilisateur Firebase Auth
+    const cred = await auth.createUserWithEmailAndPassword(email, pw);
+    const user = cred.user;
+
+    // Mettre à jour le displayName
+    await user.updateProfile({ displayName: name });
+
+    // Uploader la photo si choisie
+    if (registerAvatarFile) {
+      const url = await uploadProfilePhoto(user.uid, registerAvatarFile);
+      await user.updateProfile({ photoURL: url });
+    }
+
+    // Créer le profil dans Firestore
+    await db.doc(`users/${user.uid}`).set({
+      name,
+      email,
+      createdAt: new Date().toISOString()
+    });
+
+    showToast(`Compte créé ! Bienvenue ${name} 🎉`, "success");
+    // onAuthStateChanged gère la connexion automatique
+  } catch(err) {
+    showRegisterError(authErrFR(err.code));
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fa-solid fa-user-plus"></i> Créer mon compte`;
+  }
+});
+
+function showRegisterError(msg) {
+  registerError.classList.remove("hidden");
+  registerErrMsg.textContent = msg;
+}
+
+/* ---- Déconnexion ---- */
+document.getElementById("navLogout").addEventListener("click", async e => {
+  e.preventDefault();
+  if (!confirm("Se déconnecter de ImmoGest ?")) return;
+  closeMobileSidebar();
+  await auth.signOut();
+  // onAuthStateChanged affiche le login
+});
+
+/* ============================================================
+   6. PHOTO DE PROFIL — Firebase Storage
+   ============================================================ */
+async function uploadProfilePhoto(uid, file) {
+  const ext  = file.name.split(".").pop();
+  const ref  = storage.ref(`profiles/${uid}/avatar.${ext}`);
+  const snap = await ref.put(file);
+  return await snap.ref.getDownloadURL();
+}
+
+/** Met à jour l'avatar dans la sidebar et l'admin */
+function updateAvatarUI(photoURL, name) {
+  // Sidebar
+  const icon = document.getElementById("sidebarAvatarIcon");
+  const img  = document.getElementById("sidebarAvatarImg");
+  const nameEl = document.getElementById("sidebarUserName");
+  if (nameEl) nameEl.textContent = name || "Concierge";
+
+  if (photoURL) {
+    icon.style.display = "none";
+    img.src = photoURL;
+    img.style.display = "block";
+  } else {
+    icon.style.display = "";
+    img.style.display = "none";
+  }
+
+  // Admin panel
+  const paIcon = document.getElementById("profileAvatarIcon");
+  const paImg  = document.getElementById("profileAvatarImg");
+  if (paIcon && paImg) {
+    if (photoURL) { paIcon.style.display="none"; paImg.src=photoURL; paImg.style.display="block"; }
+    else          { paIcon.style.display=""; paImg.style.display="none"; }
+  }
+  const pName  = document.getElementById("profileName");
+  const pEmail = document.getElementById("profileEmail");
+  if (pName  && currentUser) pName.value  = currentUser.displayName || "";
+  if (pEmail && currentUser) pEmail.value = currentUser.email || "";
+}
+
+/* ============================================================
+   7. onAuthStateChanged — Point d'entrée principal
+   ============================================================ */
+function startAuthListener() {
+  auth.onAuthStateChanged(async user => {
+    if (user) {
+      // Utilisateur connecté
+      currentUser = user;
+      hideLogin();
+      updateAvatarUI(user.photoURL, user.displayName);
+      await initApp();
+    } else {
+      // Déconnecté
+      currentUser = null;
+      // Détacher les listeners Firestore
+      if(unsubTasks)  unsubTasks();
+      if(unsubOrders) unsubOrders();
+      if(unsubSpaces) unsubSpaces();
+      if(unsubApts)   unsubApts();
+      showLogin();
+    }
+  });
+}
+
+/* ============================================================
+   8. PROFIL — édition depuis le panneau admin
+   ============================================================ */
+
+// Clic sur l'avatar de la sidebar → ouvre l'admin sur la section profil
+document.getElementById("userInfoBar").addEventListener("click", () => {
+  openAdmin();
+});
+
+// Changer la photo depuis l'admin
+document.getElementById("profilePhotoInput").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file || !currentUser) return;
+
+  showToast("Upload en cours…", "info");
+  try {
+    const url = await uploadProfilePhoto(currentUser.uid, file);
+    await currentUser.updateProfile({ photoURL: url });
+    updateAvatarUI(url, currentUser.displayName);
+    showToast("Photo de profil mise à jour !", "success");
+  } catch(err) {
+    showToast("Erreur lors de l'upload : " + err.message, "error");
+  }
+});
+
+// Sauvegarder nom
+document.getElementById("btnSaveProfile").addEventListener("click", async () => {
+  const name = document.getElementById("profileName").value.trim();
+  if (!name) { showToast("Le nom ne peut pas être vide.", "error"); return; }
+  if (!currentUser) return;
+
+  try {
+    await currentUser.updateProfile({ displayName: name });
+    await db.doc(`users/${currentUser.uid}`).set({ name }, { merge: true });
+    updateAvatarUI(currentUser.photoURL, name);
+    showToast("Profil mis à jour !", "success");
+  } catch(err) {
+    showToast("Erreur : " + err.message, "error");
+  }
+});
 
 /* ============================================================
    7. UTILITAIRES HTML
@@ -213,62 +373,9 @@ function showToast(msg, type="success"){
   },3000);
 }
 
-/* ============================================================
-   9. PAGE DE CONNEXION
-   ============================================================ */
-const loginScreen = document.getElementById("loginScreen");
-const loginForm   = document.getElementById("loginForm");
-const loginPwInput= document.getElementById("loginPassword");
-const loginError  = document.getElementById("loginError");
-const loginErrMsg = document.getElementById("loginErrorMsg");
-
-/** Affiche ou cache l'écran de connexion */
-function showLogin()  { loginScreen.classList.remove("hidden"); loginPwInput.value=""; loginError.classList.add("hidden"); setTimeout(()=>loginPwInput.focus(),100); }
-function hideLogin()  { loginScreen.classList.add("hidden"); }
-
-/** Tentative de connexion */
-loginForm.addEventListener("submit", async e => {
-  e.preventDefault();
-  const val = loginPwInput.value;
-  if (!val) return;
-
-  if (checkPassword(val)) {
-    setSession();
-    hideLogin();
-    // Afficher un indicateur de chargement le temps que Firebase se connecte
-    const loadingToast = document.createElement("div");
-    loadingToast.className = "toast info";
-    loadingToast.innerHTML = `<i class="fa-solid fa-cloud"></i><span>Connexion à Firebase…</span>`;
-    document.getElementById("toastContainer").appendChild(loadingToast);
-    await initApp();
-    loadingToast.remove();
-  } else {
-    loginError.classList.remove("hidden");
-    loginErrMsg.textContent = "Mot de passe incorrect. Réessayez.";
-    loginPwInput.value = "";
-    loginPwInput.focus();
-  }
-});
-
-/** Toggle visibilité mot de passe */
-document.getElementById("loginTogglePw").addEventListener("click", () => {
-  const inp = document.getElementById("loginPassword");
-  const ico = document.getElementById("loginEyeIcon");
-  if (inp.type === "password") { inp.type="text"; ico.className="fa-solid fa-eye-slash"; }
-  else                         { inp.type="password"; ico.className="fa-solid fa-eye"; }
-});
-
-/** Déconnexion */
-document.getElementById("navLogout").addEventListener("click", e => {
-  e.preventDefault();
-  if (!confirm("Se déconnecter de ImmoGest ?")) return;
-  clearSession();
-  closeMobileSidebar();
-  showLogin();
-});
 
 /* ============================================================
-   10. ADMINISTRATION
+   9. ADMINISTRATION
    ============================================================ */
 const adminOverlay = document.getElementById("adminOverlay");
 
@@ -282,11 +389,14 @@ adminOverlay.addEventListener("click", e => { if(e.target===adminOverlay) closeA
 
 function openAdmin() {
   renderBuildingsRenameGrid();
-  // Vider les champs de MDP
-  ["adminPwCurrent","adminPwNew","adminPwConfirm"].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el) el.value="";
-  });
+  // Pré-remplir les champs du profil
+  if (currentUser) {
+    const n = document.getElementById("profileName");
+    const em = document.getElementById("profileEmail");
+    if (n)  n.value  = currentUser.displayName || "";
+    if (em) em.value = currentUser.email || "";
+    updateAvatarUI(currentUser.photoURL, currentUser.displayName);
+  }
   adminOverlay.classList.remove("hidden");
 }
 function closeAdmin() {
@@ -310,23 +420,15 @@ document.getElementById("btnSaveBuildings").addEventListener("click", () => {
   const inputs = document.querySelectorAll(".building-rename-input");
   const newNames = [];
   let hasEmpty = false;
-
   inputs.forEach(inp => {
     const val = inp.value.trim();
     if (!val) hasEmpty = true;
     newNames.push(val || BUILDINGS[inp.dataset.index]);
   });
-
   if (hasEmpty) { showToast("Chaque immeuble doit avoir un nom.", "error"); return; }
-
-  BUILDINGS = newNames;
-  saveBuildings(BUILDINGS);
-
-  // Mettre à jour les filtres
+  saveBuildings(newNames);
   refreshBuildingSelects();
-  // Mettre à jour l'affichage
   renderDashboard();
-
   showToast("Noms des immeubles enregistrés !", "success");
   closeAdmin();
 });
@@ -334,37 +436,11 @@ document.getElementById("btnSaveBuildings").addEventListener("click", () => {
 /** Réinitialiser les noms */
 document.getElementById("btnResetBuildings").addEventListener("click", () => {
   if (!confirm("Remettre les noms par défaut (Immeuble A … I) ?")) return;
-  BUILDINGS = [...DEFAULT_BUILDINGS];
-  saveBuildings(BUILDINGS);
+  saveBuildings([...DEFAULT_BUILDINGS]);
   renderBuildingsRenameGrid();
   refreshBuildingSelects();
   renderDashboard();
   showToast("Noms réinitialisés.", "info");
-});
-
-/** Changement de mot de passe */
-document.getElementById("btnChangePassword").addEventListener("click", () => {
-  const cur     = document.getElementById("adminPwCurrent").value;
-  const newPw   = document.getElementById("adminPwNew").value;
-  const confirm = document.getElementById("adminPwConfirm").value;
-
-  if (!checkPassword(cur)) { showToast("Mot de passe actuel incorrect.", "error"); return; }
-  if (newPw.length < 6)    { showToast("Le nouveau mot de passe doit faire au moins 6 caractères.", "error"); return; }
-  if (newPw !== confirm)   { showToast("Les mots de passe ne correspondent pas.", "error"); return; }
-
-  setStoredHash(newPw);
-  ["adminPwCurrent","adminPwNew","adminPwConfirm"].forEach(id=>{ document.getElementById(id).value=""; });
-  showToast("Mot de passe changé avec succès !", "success");
-});
-
-/** Toggle visibilité dans le panneau admin */
-document.querySelectorAll(".admin-pw-toggle").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const inp = document.getElementById(btn.dataset.target);
-    const ico = btn.querySelector("i");
-    if (inp.type === "password") { inp.type="text"; ico.className="fa-solid fa-eye-slash"; }
-    else                         { inp.type="password"; ico.className="fa-solid fa-eye"; }
-  });
 });
 
 /** Réinitialiser toutes les données */
@@ -372,7 +448,6 @@ document.getElementById("btnResetAllData").addEventListener("click", async () =>
   if (!confirm("⚠️ Attention ! Cette action supprimera DÉFINITIVEMENT toutes les tâches, commandes, places et appartements.\n\nÊtes-vous sûr ?")) return;
   if (!confirm("Dernière confirmation : supprimer toutes les données ?")) return;
 
-  // Supprimer tous les documents Firestore
   const deleteCol = async (name) => {
     const snap = await col(name).get();
     const batch = db.batch();
@@ -380,7 +455,6 @@ document.getElementById("btnResetAllData").addEventListener("click", async () =>
     await batch.commit();
   };
   await Promise.all(["tasks","orders","spaces","apts"].map(deleteCol));
-
   closeAdmin();
   showToast("Toutes les données ont été supprimées.", "info");
 });
@@ -1024,90 +1098,73 @@ function deleteApt(id){
    18. DONNÉES DE DÉMO
    ============================================================ */
 /* ============================================================
-   19. DONNÉES DE DÉMO — insérées dans Firestore si tout est vide
+   18. DONNÉES DE DÉMO — uniquement si Firestore est vide
    ============================================================ */
 async function seedDemoData() {
-  // Vérifier si Firestore est déjà peuplé
   const snap = await col("tasks").limit(1).get();
-  if (!snap.empty) return; // Déjà des données → on ne touche pas
-
+  if (!snap.empty) return;
   showToast("Premier lancement — ajout des données de démo…", "info");
-
-  const demoTasks = [
+  const dT=[
     {id:uid(),title:"Tondre la pelouse (côté rue)",        building:BUILDINGS[0],priority:"medium",status:"todo",      description:"Secteur principal et bordures"},
-    {id:uid(),title:"Remplacer ampoules couloir 2e étage", building:BUILDINGS[2],priority:"high",  status:"todo",      description:"3 ampoules E27 à changer"},
+    {id:uid(),title:"Remplacer ampoules couloir 2e étage", building:BUILDINGS[2],priority:"high",  status:"todo",      description:"3 ampoules E27"},
     {id:uid(),title:"Nettoyage salle de poubelles",        building:BUILDINGS[4],priority:"high",  status:"inprogress",description:""},
     {id:uid(),title:"Contrôle extincteurs",                building:BUILDINGS[1],priority:"medium",status:"todo",      description:"Vérification annuelle"},
     {id:uid(),title:"Débouchage gouttière nord",           building:BUILDINGS[3],priority:"low",   status:"todo",      description:""},
-    {id:uid(),title:"Révision interphone appt 12",         building:BUILDINGS[0],priority:"medium",status:"done",      description:""},
   ];
-  const demoOrders = [
+  const dO=[
     {id:uid(),supplier:"Hornbach",  date:"2025-06-01",status:"received",building:BUILDINGS[2],notes:"Commande urgente",
-     items:[{id:uid(),name:"Ampoules LED E27",qty:"20",unit:"pcs",notes:"Réf. LED-E27-10W"},{id:uid(),name:"Câble électrique 2.5mm",qty:"5",unit:"m",notes:""}]},
-    {id:uid(),supplier:"Migros Pro",date:"2025-06-05",status:"ordered", building:"",           notes:"Livraison jeudi",
-     items:[{id:uid(),name:"Sel pour adoucisseur",qty:"2",unit:"sacs 25kg",notes:""},{id:uid(),name:"Produit nettoyant sol",qty:"4",unit:"L",notes:"Sans parfum"},{id:uid(),name:"Sacs poubelle 110L",qty:"3",unit:"rouleaux",notes:""}]},
-    {id:uid(),supplier:"Decora",    date:"2025-06-10",status:"pending",  building:BUILDINGS[5],notes:"Pour retouches hall",
-     items:[{id:uid(),name:"Peinture blanc mat",qty:"10",unit:"L",notes:"RAL 9010"},{id:uid(),name:"Rouleaux peinture",qty:"4",unit:"pcs",notes:""}]},
+     items:[{id:uid(),name:"Ampoules LED E27",qty:"20",unit:"pcs",notes:"LED-E27-10W"},{id:uid(),name:"Câble 2.5mm",qty:"5",unit:"m",notes:""}]},
+    {id:uid(),supplier:"Migros Pro",date:"2025-06-05",status:"ordered", building:"",notes:"Livraison jeudi",
+     items:[{id:uid(),name:"Sel adoucisseur",qty:"2",unit:"sacs",notes:""},{id:uid(),name:"Nettoyant sol",qty:"4",unit:"L",notes:""},{id:uid(),name:"Sacs 110L",qty:"3",unit:"rouleaux",notes:""}]},
   ];
-  const demoSpaces = [
+  const dS=[
     {id:uid(),name:"Place 3",  building:BUILDINGS[0],type:"indoor",  notes:""},
     {id:uid(),name:"Place 11", building:BUILDINGS[1],type:"outdoor", notes:""},
-    {id:uid(),name:"Place P4", building:BUILDINGS[3],type:"indoor",  notes:"Handicapé"},
   ];
-  const demoApts = [
-    {id:uid(),name:"Appartement 8A",building:BUILDINGS[2],floor:"4e",             rooms:"4.5",notes:"Disponible dès le 1er juillet"},
-    {id:uid(),name:"Studio 2",      building:BUILDINGS[4],floor:"Rez-de-chaussée",rooms:"1.5",notes:"Travaux de peinture à prévoir"},
+  const dA=[
+    {id:uid(),name:"Appartement 8A",building:BUILDINGS[2],floor:"4e",rooms:"4.5",notes:"Disponible juillet"},
+    {id:uid(),name:"Studio 2",      building:BUILDINGS[4],floor:"RDC",rooms:"1.5",notes:"Peinture à prévoir"},
   ];
-
-  // Écriture en batch (plus efficace)
-  const batch = db.batch();
-  [...demoTasks] .forEach(d => { const {id,...r}=d; batch.set(col("tasks" ).doc(id), r); });
-  [...demoOrders].forEach(d => { const {id,...r}=d; batch.set(col("orders").doc(id), r); });
-  [...demoSpaces].forEach(d => { const {id,...r}=d; batch.set(col("spaces").doc(id), r); });
-  [...demoApts]  .forEach(d => { const {id,...r}=d; batch.set(col("apts"  ).doc(id), r); });
+  const batch=db.batch();
+  dT.forEach(d=>{const{id,...r}=d;batch.set(col("tasks" ).doc(id),r);});
+  dO.forEach(d=>{const{id,...r}=d;batch.set(col("orders").doc(id),r);});
+  dS.forEach(d=>{const{id,...r}=d;batch.set(col("spaces").doc(id),r);});
+  dA.forEach(d=>{const{id,...r}=d;batch.set(col("apts"  ).doc(id),r);});
   await batch.commit();
 }
 
 /* ============================================================
-   20. INITIALISATION DE L'APPLICATION (après connexion)
+   19. INITIALISATION APRÈS CONNEXION
    ============================================================ */
 async function initApp() {
-  // Initialiser Firebase
-  const ok = initFirebase();
-  if (!ok) {
-    showToast("⚠️ Firebase non configuré — remplis firebase-config.js !", "error");
-    return;
-  }
-
-  // Charger les configs
-  await Promise.all([syncPasswordFromFirestore(), loadBuildings()]);
-
-  // Peupler les données de démo si c'est la première fois
+  await loadBuildings();
   await seedDemoData();
-
-  // Démarrer les écouteurs temps réel
   startListeners();
-
-  // Mettre à jour l'interface
   refreshBuildingSelects();
   bindTaskFilters();
   bindOrderFilters();
   bindSpaceFilter();
   renderDashboard();
-
-  // Indicateur de connexion dans la sidebar
-  const foot = document.querySelector(".user-role");
-  if (foot) foot.textContent = "☁️ Synchronisé Firebase";
 }
 
 /* ============================================================
-   21. DÉMARRAGE
+   20. DÉMARRAGE — Firebase Auth prend le contrôle
    ============================================================ */
-if (isLoggedIn()) {
-  hideLogin();
-  initApp();
+const ok = initFirebase();
+if (!ok) {
+  // Firebase non configuré → afficher un message clair
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#f4f6fb;padding:2rem">
+      <div style="background:#fff;border-radius:12px;padding:2rem;max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)">
+        <img src="logo.png" style="width:80px;margin:0 auto 1rem"/>
+        <h2 style="color:#1a2640;margin-bottom:.5rem">Firebase non configuré</h2>
+        <p style="color:#6b7a94;margin-bottom:1rem">Remplis le fichier <code>firebase-config.js</code> avec tes clés Firebase et active Firebase Authentication dans la console Firebase.</p>
+        <a href="https://console.firebase.google.com" target="_blank" style="display:inline-block;background:#e86a1a;color:#fff;padding:.6rem 1.2rem;border-radius:6px;text-decoration:none;font-weight:600">Ouvrir Firebase Console</a>
+      </div>
+    </div>`;
 } else {
-  showLogin();
+  // Firebase OK → écouter l'état d'authentification
+  startAuthListener();
 }
 
 /* ============================================================

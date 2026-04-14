@@ -1511,3 +1511,164 @@ img { display:block; max-width:100%; }
   .admin-panel { max-width:100%; }
   .admin-body { padding:1.25rem 1rem; }
 }
+
+/* ============================================================
+   BOUTON PDF & impression
+   ============================================================ */
+.btn-pdf {
+  background: #dc2626;
+  color: var(--white);
+  border-color: #dc2626;
+}
+.btn-pdf:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  box-shadow: 0 4px 14px rgba(220,38,38,.35);
+}
+
+/* ============================================================
+   LOGIN TABS (Connexion / Inscription)
+   ============================================================ */
+.login-tabs {
+  display: flex;
+  background: var(--bg2);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  margin: 1rem 0 1.25rem;
+  gap: 2px;
+}
+.login-tab {
+  flex: 1;
+  padding: .5rem .75rem;
+  border: none;
+  border-radius: 5px;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-light);
+  transition: all var(--transition);
+}
+.login-tab.active {
+  background: var(--white);
+  color: var(--navy);
+  box-shadow: 0 1px 4px rgba(26,38,64,.12);
+}
+
+/* Photo de profil dans le formulaire d'inscription */
+.register-avatar-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+.register-avatar-preview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--blue-pale);
+  border: 2px dashed var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: var(--blue);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.register-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.register-avatar-label {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--blue);
+  cursor: pointer;
+  padding: .3rem .75rem;
+  border: 1.5px solid var(--blue);
+  border-radius: 99px;
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.register-avatar-label:hover {
+  background: var(--blue);
+  color: var(--white);
+}
+
+/* ============================================================
+   PROFIL — Section dans l'admin
+   ============================================================ */
+.profile-section {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.profile-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.profile-avatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: var(--blue-pale);
+  border: 3px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  color: var(--blue);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.profile-avatar:hover { border-color: var(--blue); }
+.profile-avatar-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--orange);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  transition: background var(--transition);
+}
+.profile-avatar-btn:hover { background: var(--orange-light); }
+.profile-fields {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+/* Sidebar avatar avec photo */
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--navy-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,.7);
+  font-size: 1rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,.15);
+  transition: border-color var(--transition);
+}
+.user-info:hover .user-avatar { border-color: var(--orange-light); }

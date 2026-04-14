@@ -14,10 +14,12 @@
 <body>
 
   <!-- ======================================================
-       ÉCRAN DE CONNEXION
+       ÉCRAN DE CONNEXION / INSCRIPTION
   ====================================================== -->
   <div class="login-screen" id="loginScreen">
     <div class="login-card">
+
+      <!-- Logo -->
       <div class="login-logo-wrap">
         <div class="login-logo-bg">
           <img src="logo.png" alt="ImmoGest" class="login-logo"/>
@@ -26,26 +28,87 @@
       <div class="login-app-name">ImmoGest</div>
       <div class="login-subtitle">Gestion Immobilière</div>
 
+      <!-- Onglets -->
+      <div class="login-tabs">
+        <button class="login-tab active" id="tabLogin">Se connecter</button>
+        <button class="login-tab" id="tabRegister">S'inscrire</button>
+      </div>
+
+      <!-- ===== FORMULAIRE CONNEXION ===== -->
       <form class="login-form" id="loginForm" autocomplete="off">
+        <div class="login-field">
+          <label>Adresse e-mail</label>
+          <div class="login-field-inner">
+            <i class="fa-solid fa-envelope"></i>
+            <input type="email" id="loginEmail" placeholder="votre@email.com" autocomplete="email"/>
+          </div>
+        </div>
         <div class="login-field">
           <label>Mot de passe</label>
           <div class="login-field-inner">
             <i class="fa-solid fa-lock"></i>
-            <input type="password" id="loginPassword" placeholder="Entrez votre mot de passe" autocomplete="current-password"/>
+            <input type="password" id="loginPassword" placeholder="Votre mot de passe" autocomplete="current-password"/>
             <button type="button" class="login-toggle-pw" id="loginTogglePw" tabindex="-1">
               <i class="fa-solid fa-eye" id="loginEyeIcon"></i>
             </button>
           </div>
         </div>
-
         <div class="login-error hidden" id="loginError">
           <i class="fa-solid fa-circle-exclamation"></i>
-          <span id="loginErrorMsg">Mot de passe incorrect.</span>
+          <span id="loginErrorMsg">Email ou mot de passe incorrect.</span>
+        </div>
+        <button type="submit" class="login-btn">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> Se connecter
+        </button>
+      </form>
+
+      <!-- ===== FORMULAIRE INSCRIPTION ===== -->
+      <form class="login-form hidden" id="registerForm" autocomplete="off">
+        <!-- Photo de profil -->
+        <div class="register-avatar-picker" id="registerAvatarPicker">
+          <div class="register-avatar-preview" id="registerAvatarPreview">
+            <i class="fa-solid fa-user-plus"></i>
+          </div>
+          <label class="register-avatar-label" for="registerAvatarInput">
+            <i class="fa-solid fa-camera"></i> Choisir une photo
+          </label>
+          <input type="file" id="registerAvatarInput" accept="image/*" style="display:none"/>
         </div>
 
+        <div class="login-field">
+          <label>Prénom & Nom</label>
+          <div class="login-field-inner">
+            <i class="fa-solid fa-user"></i>
+            <input type="text" id="registerName" placeholder="Jean Dupont" autocomplete="name"/>
+          </div>
+        </div>
+        <div class="login-field">
+          <label>Adresse e-mail</label>
+          <div class="login-field-inner">
+            <i class="fa-solid fa-envelope"></i>
+            <input type="email" id="registerEmail" placeholder="votre@email.com" autocomplete="email"/>
+          </div>
+        </div>
+        <div class="login-field">
+          <label>Mot de passe</label>
+          <div class="login-field-inner">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="registerPassword" placeholder="Minimum 6 caractères"/>
+          </div>
+        </div>
+        <div class="login-field">
+          <label>Confirmer le mot de passe</label>
+          <div class="login-field-inner">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="registerConfirm" placeholder="Répétez le mot de passe"/>
+          </div>
+        </div>
+        <div class="login-error hidden" id="registerError">
+          <i class="fa-solid fa-circle-exclamation"></i>
+          <span id="registerErrorMsg">Erreur d'inscription.</span>
+        </div>
         <button type="submit" class="login-btn">
-          <i class="fa-solid fa-arrow-right-to-bracket"></i>
-          Se connecter
+          <i class="fa-solid fa-user-plus"></i> Créer mon compte
         </button>
       </form>
 
@@ -72,7 +135,40 @@
 
       <div class="admin-body">
 
-        <!-- Section : Noms des immeubles -->
+        <!-- Section : Profil utilisateur -->
+        <div class="admin-section">
+          <div class="admin-section-title">
+            <i class="fa-solid fa-circle-user"></i>
+            Mon profil
+          </div>
+          <div class="profile-section">
+            <!-- Avatar cliquable -->
+            <div class="profile-avatar-wrap">
+              <div class="profile-avatar" id="profileAvatar">
+                <i class="fa-solid fa-user-tie" id="profileAvatarIcon"></i>
+                <img id="profileAvatarImg" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%"/>
+              </div>
+              <label class="profile-avatar-btn" for="profilePhotoInput" title="Changer la photo">
+                <i class="fa-solid fa-camera"></i>
+              </label>
+              <input type="file" id="profilePhotoInput" accept="image/*" style="display:none"/>
+            </div>
+            <!-- Infos -->
+            <div class="profile-fields">
+              <div class="admin-pw-field">
+                <label>Prénom & Nom</label>
+                <input type="text" id="profileName" placeholder="Jean Dupont"/>
+              </div>
+              <div class="admin-pw-field">
+                <label>Email</label>
+                <input type="email" id="profileEmail" placeholder="votre@email.com" readonly style="opacity:.6;cursor:not-allowed"/>
+              </div>
+              <button class="btn btn-primary" id="btnSaveProfile" style="align-self:flex-start;margin-top:.25rem">
+                <i class="fa-solid fa-floppy-disk"></i> Enregistrer le profil
+              </button>
+            </div>
+          </div>
+        </div>
         <div class="admin-section">
           <div class="admin-section-title">
             <i class="fa-solid fa-building"></i>
@@ -90,46 +186,6 @@
             </button>
             <button class="btn btn-ghost" id="btnResetBuildings">
               <i class="fa-solid fa-rotate-left"></i> Réinitialiser
-            </button>
-          </div>
-        </div>
-
-        <!-- Section : Mot de passe -->
-        <div class="admin-section">
-          <div class="admin-section-title">
-            <i class="fa-solid fa-key"></i>
-            Changer le mot de passe
-          </div>
-          <div class="admin-pw-form">
-            <div class="admin-pw-field">
-              <label>Mot de passe actuel</label>
-              <div class="pw-input-wrap">
-                <input type="password" id="adminPwCurrent" placeholder="Mot de passe actuel"/>
-                <button type="button" class="admin-pw-toggle" data-target="adminPwCurrent">
-                  <i class="fa-solid fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="admin-pw-field">
-              <label>Nouveau mot de passe</label>
-              <div class="pw-input-wrap">
-                <input type="password" id="adminPwNew" placeholder="Nouveau mot de passe (min. 6 car.)"/>
-                <button type="button" class="admin-pw-toggle" data-target="adminPwNew">
-                  <i class="fa-solid fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="admin-pw-field">
-              <label>Confirmer le nouveau mot de passe</label>
-              <div class="pw-input-wrap">
-                <input type="password" id="adminPwConfirm" placeholder="Confirmer le nouveau mot de passe"/>
-                <button type="button" class="admin-pw-toggle" data-target="adminPwConfirm">
-                  <i class="fa-solid fa-eye"></i>
-                </button>
-              </div>
-            </div>
-            <button class="btn btn-primary" id="btnChangePassword" style="align-self:flex-start">
-              <i class="fa-solid fa-shield-halved"></i> Changer le mot de passe
             </button>
           </div>
         </div>
@@ -201,12 +257,16 @@
     </nav>
 
     <div class="sidebar-footer">
-      <div class="user-info">
-        <div class="user-avatar"><i class="fa-solid fa-user-tie"></i></div>
-        <div>
-          <div class="user-name">Concierge</div>
-          <div class="user-role" id="footerBuildingCount">9 immeubles</div>
+      <div class="user-info" id="userInfoBar" title="Modifier mon profil" style="cursor:pointer">
+        <div class="user-avatar" id="sidebarAvatar">
+          <i class="fa-solid fa-user-tie" id="sidebarAvatarIcon"></i>
+          <img id="sidebarAvatarImg" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%"/>
         </div>
+        <div style="flex:1;min-width:0">
+          <div class="user-name" id="sidebarUserName">Concierge</div>
+          <div class="user-role" id="footerBuildingCount">☁️ Synchronisé Firebase</div>
+        </div>
+        <i class="fa-solid fa-pen" style="font-size:.7rem;color:rgba(255,255,255,.35);flex-shrink:0"></i>
       </div>
     </div>
   </aside>
@@ -385,6 +445,8 @@
   <!-- Firebase SDK (compat v10) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 
   <!-- ⚠️ TON FICHIER DE CONFIGURATION FIREBASE -->
   <script src="firebase-config.js"></script>
