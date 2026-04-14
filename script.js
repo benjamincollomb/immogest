@@ -705,7 +705,7 @@ function taskFormHTML(t={}){
 }
 
 document.getElementById("btnAddTask").addEventListener("click", async ()=>{
-  openModal("Nouvelle tâche",taskFormHTML(),()=>{
+  openModal("Nouvelle tâche",taskFormHTML(), async ()=>{
     const title=mval("fTitle");
     if(!title){showToast("Le titre est obligatoire.","error");return;}
     const newTask={id:uid(),title,building:mval("fBuilding"),priority:mval("fPriority"),status:mval("fStatus"),description:mval("fDesc")};
@@ -715,7 +715,7 @@ document.getElementById("btnAddTask").addEventListener("click", async ()=>{
 });
 function editTask(id){
   const t=tasks.find(t=>t.id===id); if(!t)return;
-  openModal("Modifier la tâche",taskFormHTML(t),()=>{
+  openModal("Modifier la tâche",taskFormHTML(t), async ()=>{
     const title=mval("fTitle");
     if(!title){showToast("Le titre est obligatoire.","error");return;}
     Object.assign(t,{title,building:mval("fBuilding"),priority:mval("fPriority"),status:mval("fStatus"),description:mval("fDesc")});
@@ -926,7 +926,7 @@ function bindRemoveButtons(){
 }
 
 document.getElementById("btnAddOrder").addEventListener("click", async ()=>{
-  openModal("Nouvelle commande",orderFormHTML(),()=>{
+  openModal("Nouvelle commande",orderFormHTML(), async ()=>{
     const supplier=mval("fSupplier");
     if(!supplier){showToast("Le fournisseur est obligatoire.","error");return;}
     const items=readProductLines();
@@ -939,7 +939,7 @@ document.getElementById("btnAddOrder").addEventListener("click", async ()=>{
 });
 function editOrder(id){
   const o=orders.find(o=>o.id===id); if(!o)return;
-  openModal("Modifier la commande",orderFormHTML(o),()=>{
+  openModal("Modifier la commande",orderFormHTML(o), async ()=>{
     const supplier=mval("fSupplier");
     if(!supplier){showToast("Le fournisseur est obligatoire.","error");return;}
     const items=readProductLines();
@@ -1038,7 +1038,7 @@ function spaceFormHTML(s={}){
     </div>`;
 }
 document.getElementById("btnAddSpace").addEventListener("click", async ()=>{
-  openModal("Nouvelle place de parking",spaceFormHTML(),()=>{
+  openModal("Nouvelle place de parking",spaceFormHTML(), async ()=>{
     const name=mval("fSName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     const newSpace={id:uid(),name,building:mval("fSBuilding"),type:mval("fSType"),notes:mval("fSNotes")};
     await fsAdd("spaces",newSpace); closeModal();
@@ -1047,7 +1047,7 @@ document.getElementById("btnAddSpace").addEventListener("click", async ()=>{
 });
 function editSpace(id){
   const s=spaces.find(s=>s.id===id); if(!s)return;
-  openModal("Modifier la place",spaceFormHTML(s),()=>{
+  openModal("Modifier la place",spaceFormHTML(s), async ()=>{
     const name=mval("fSName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     Object.assign(s,{name,building:mval("fSBuilding"),type:mval("fSType"),notes:mval("fSNotes")});
     await fsUpdate("spaces",s.id,s); closeModal();
@@ -1081,7 +1081,7 @@ function aptFormHTML(a={}){
     </div>`;
 }
 document.getElementById("btnAddApt").addEventListener("click", async ()=>{
-  openModal("Nouvel appartement libre",aptFormHTML(),()=>{
+  openModal("Nouvel appartement libre",aptFormHTML(), async ()=>{
     const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     const newApt={id:uid(),name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")};
     await fsAdd("apts",newApt); closeModal();
@@ -1090,7 +1090,7 @@ document.getElementById("btnAddApt").addEventListener("click", async ()=>{
 });
 function editApt(id){
   const a=apts.find(a=>a.id===id); if(!a)return;
-  openModal("Modifier l'appartement",aptFormHTML(a),()=>{
+  openModal("Modifier l'appartement",aptFormHTML(a), async ()=>{
     const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     Object.assign(a,{name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")});
     await fsUpdate("apts",a.id,a); closeModal();
