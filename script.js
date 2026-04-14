@@ -1,29 +1,39 @@
 /* ============================================================
    IMMOGEST — script.js
-   Authentification + Administration + Gestion complète
+   Authentification + Administration + Firebase Firestore
    ============================================================ */
 "use strict";
 
 /* ============================================================
-   1. CLÉS LOCALSTORAGE
+   1. FIREBASE — Initialisation
    ============================================================ */
-const KEYS = {
-  tasks:     "ig_tasks",
-  orders:    "ig_orders",
-  spaces:    "ig_spaces",
-  apts:      "ig_apts",
-  buildings: "ig_buildings",
-  password:  "ig_password",
-  session:   "ig_session"
-};
+
+// firebaseConfig est défini dans firebase-config.js
+let db = null;
+
+function initFirebase() {
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    db = firebase.firestore();
+    console.log("✅ Firebase Firestore connecté");
+    return true;
+  } catch (e) {
+    console.error("❌ Erreur Firebase :", e);
+    return false;
+  }
+}
+
+/** Références aux collections Firestore */
+function col(name) { return db.collection(name); }
 
 /* ============================================================
-   2. MOT DE PASSE (hash simple côté client)
-   Mot de passe par défaut : immogest
+   2. MOT DE PASSE (stocké dans Firestore doc "config/auth")
+      + localStorage comme cache local
    ============================================================ */
 const DEFAULT_PASSWORD = "immogest";
 
-/** Hache une chaîne (FNV-1a 32-bit, suffisant pour un outil local) */
 function hashString(str) {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < str.length; i++) {
@@ -33,25 +43,38 @@ function hashString(str) {
   return h.toString(16);
 }
 
+// Le hash est lu depuis localStorage (cache) ou Firestore
 function getStoredHash() {
-  return localStorage.getItem(KEYS.password) || hashString(DEFAULT_PASSWORD);
+  return localStorage.getItem("ig_password") || hashString(DEFAULT_PASSWORD);
 }
-function setStoredHash(newPw) {
-  localStorage.setItem(KEYS.password, hashString(newPw));
+async function setStoredHash(newPw) {
+  const h = hashString(newPw);
+  localStorage.setItem("ig_password", h);
+  // Sauvegarder aussi dans Firestore pour la synchro multi-appareils
+  if (db) await db.doc("config/auth").set({ passwordHash: h });
+}
+async function syncPasswordFromFirestore() {
+  if (!db) return;
+  try {
+    const snap = await db.doc("config/auth").get();
+    if (snap.exists && snap.data().passwordHash) {
+      localStorage.setItem("ig_password", snap.data().passwordHash);
+    }
+  } catch(e) { console.warn("Sync password:", e); }
 }
 function checkPassword(input) {
   return hashString(input) === getStoredHash();
 }
 
 /* ============================================================
-   3. SESSION (sessionStorage = expire à la fermeture du navigateur)
+   3. SESSION
    ============================================================ */
-function isLoggedIn()  { return sessionStorage.getItem(KEYS.session) === "1"; }
-function setSession()  { sessionStorage.setItem(KEYS.session, "1"); }
-function clearSession(){ sessionStorage.removeItem(KEYS.session); }
+function isLoggedIn()  { return sessionStorage.getItem("ig_session") === "1"; }
+function setSession()  { sessionStorage.setItem("ig_session", "1"); }
+function clearSession(){ sessionStorage.removeItem("ig_session"); }
 
 /* ============================================================
-   4. IMMEUBLES (noms personnalisables)
+   4. IMMEUBLES — stockés dans Firestore doc "config/buildings"
    ============================================================ */
 const DEFAULT_BUILDINGS = [
   "Immeuble A","Immeuble B","Immeuble C",
@@ -59,31 +82,93 @@ const DEFAULT_BUILDINGS = [
   "Immeuble G","Immeuble H","Immeuble I"
 ];
 
-function loadBuildings() {
+let BUILDINGS = [...DEFAULT_BUILDINGS];
+
+async function loadBuildings() {
+  if (!db) return;
   try {
-    const stored = JSON.parse(localStorage.getItem(KEYS.buildings));
-    if (Array.isArray(stored) && stored.length === 9) return stored;
-  } catch {}
-  return [...DEFAULT_BUILDINGS];
-}
-function saveBuildings(arr) {
-  localStorage.setItem(KEYS.buildings, JSON.stringify(arr));
+    const snap = await db.doc("config/buildings").get();
+    if (snap.exists && Array.isArray(snap.data().list) && snap.data().list.length === 9) {
+      BUILDINGS = snap.data().list;
+    }
+  } catch(e) { console.warn("loadBuildings:", e); }
 }
 
-/** Liste active des noms d'immeubles */
-let BUILDINGS = loadBuildings();
+async function saveBuildings(arr) {
+  BUILDINGS = arr;
+  if (db) {
+    try { await db.doc("config/buildings").set({ list: arr }); }
+    catch(e) { console.error("saveBuildings:", e); }
+  }
+}
 
 /* ============================================================
-   5. DONNÉES
+   5. DONNÉES EN MÉMOIRE (mis à jour par les listeners Firestore)
    ============================================================ */
-function load(k) { try{ return JSON.parse(localStorage.getItem(k))||[]; }catch{ return []; } }
-function save(k,d){ localStorage.setItem(k,JSON.stringify(d)); }
-function uid()    { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
-let tasks  = load(KEYS.tasks);
-let orders = load(KEYS.orders);
-let spaces = load(KEYS.spaces);
-let apts   = load(KEYS.apts);
+let tasks  = [];
+let orders = [];
+let spaces = [];
+let apts   = [];
+
+// Listeners actifs (pour pouvoir les détacher si besoin)
+let unsubTasks=null, unsubOrders=null, unsubSpaces=null, unsubApts=null;
+
+/**
+ * Démarre les écouteurs temps réel Firestore.
+ * À chaque modification dans la BD → les tableaux locaux sont mis à jour
+ * et l'interface est re-rendue automatiquement.
+ */
+function startListeners() {
+  // --- TÂCHES ---
+  unsubTasks = col("tasks").onSnapshot(snap => {
+    tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDashboard();
+    if (document.getElementById("tab-tasks").classList.contains("active")) renderTasks();
+  }, err => console.error("tasks listener:", err));
+
+  // --- COMMANDES ---
+  unsubOrders = col("orders").onSnapshot(snap => {
+    orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDashboard();
+    if (document.getElementById("tab-orders").classList.contains("active")) renderOrders();
+  }, err => console.error("orders listener:", err));
+
+  // --- PLACES ---
+  unsubSpaces = col("spaces").onSnapshot(snap => {
+    spaces = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDashboard();
+    if (document.getElementById("tab-spaces").classList.contains("active")) renderSpaces();
+  }, err => console.error("spaces listener:", err));
+
+  // --- APPARTEMENTS ---
+  unsubApts = col("apts").onSnapshot(snap => {
+    apts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderDashboard();
+    if (document.getElementById("tab-spaces").classList.contains("active")) renderSpaces();
+  }, err => console.error("apts listener:", err));
+}
+
+/* ---- Opérations CRUD Firestore ---- */
+
+/** Ajoute un document dans une collection Firestore */
+async function fsAdd(colName, data) {
+  const { id, ...rest } = data;            // l'id Firestore sera généré automatiquement
+  const ref = await col(colName).doc(id).set(rest);
+  return id;
+}
+
+/** Met à jour un document existant */
+async function fsUpdate(colName, id, data) {
+  const { id: _id, ...rest } = data;
+  await col(colName).doc(id).set(rest, { merge: true });
+}
+
+/** Supprime un document */
+async function fsDelete(colName, id) {
+  await col(colName).doc(id).delete();
+}
 
 /* ============================================================
    6. LABELS
@@ -142,7 +227,7 @@ function showLogin()  { loginScreen.classList.remove("hidden"); loginPwInput.val
 function hideLogin()  { loginScreen.classList.add("hidden"); }
 
 /** Tentative de connexion */
-loginForm.addEventListener("submit", e => {
+loginForm.addEventListener("submit", async e => {
   e.preventDefault();
   const val = loginPwInput.value;
   if (!val) return;
@@ -150,7 +235,13 @@ loginForm.addEventListener("submit", e => {
   if (checkPassword(val)) {
     setSession();
     hideLogin();
-    initApp();
+    // Afficher un indicateur de chargement le temps que Firebase se connecte
+    const loadingToast = document.createElement("div");
+    loadingToast.className = "toast info";
+    loadingToast.innerHTML = `<i class="fa-solid fa-cloud"></i><span>Connexion à Firebase…</span>`;
+    document.getElementById("toastContainer").appendChild(loadingToast);
+    await initApp();
+    loadingToast.remove();
   } else {
     loginError.classList.remove("hidden");
     loginErrMsg.textContent = "Mot de passe incorrect. Réessayez.";
@@ -277,19 +368,20 @@ document.querySelectorAll(".admin-pw-toggle").forEach(btn => {
 });
 
 /** Réinitialiser toutes les données */
-document.getElementById("btnResetAllData").addEventListener("click", () => {
+document.getElementById("btnResetAllData").addEventListener("click", async () => {
   if (!confirm("⚠️ Attention ! Cette action supprimera DÉFINITIVEMENT toutes les tâches, commandes, places et appartements.\n\nÊtes-vous sûr ?")) return;
   if (!confirm("Dernière confirmation : supprimer toutes les données ?")) return;
 
-  tasks  = []; orders = []; spaces = []; apts = [];
-  save(KEYS.tasks,tasks); save(KEYS.orders,orders);
-  save(KEYS.spaces,spaces); save(KEYS.apts,apts);
+  // Supprimer tous les documents Firestore
+  const deleteCol = async (name) => {
+    const snap = await col(name).get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  };
+  await Promise.all(["tasks","orders","spaces","apts"].map(deleteCol));
 
   closeAdmin();
-  renderDashboard();
-  renderTasks();
-  renderOrders();
-  renderSpaces();
   showToast("Toutes les données ont été supprimées.", "info");
 });
 
@@ -496,7 +588,7 @@ function toggleTaskStatus(id){
   const t=tasks.find(t=>t.id===id); if(!t)return;
   const c={todo:"inprogress",inprogress:"done",done:"todo"};
   t.status=c[t.status];
-  save(KEYS.tasks,tasks); renderTasks(); renderDashboard();
+  fsUpdate("tasks",t.id,t); renderTasks(); renderDashboard();
   showToast(`Statut : ${STATUS_TASK_LABELS[t.status]}`,"info");
 }
 
@@ -533,8 +625,8 @@ document.getElementById("btnAddTask").addEventListener("click",()=>{
   openModal("Nouvelle tâche",taskFormHTML(),()=>{
     const title=mval("fTitle");
     if(!title){showToast("Le titre est obligatoire.","error");return;}
-    tasks.push({id:uid(),title,building:mval("fBuilding"),priority:mval("fPriority"),status:mval("fStatus"),description:mval("fDesc")});
-    save(KEYS.tasks,tasks); closeModal(); renderTasks(); renderDashboard();
+    const newTask={id:uid(),title,building:mval("fBuilding"),priority:mval("fPriority"),status:mval("fStatus"),description:mval("fDesc")};
+    await fsAdd("tasks",newTask); closeModal();
     showToast("Tâche ajoutée !","success");
   });
 });
@@ -544,13 +636,13 @@ function editTask(id){
     const title=mval("fTitle");
     if(!title){showToast("Le titre est obligatoire.","error");return;}
     Object.assign(t,{title,building:mval("fBuilding"),priority:mval("fPriority"),status:mval("fStatus"),description:mval("fDesc")});
-    save(KEYS.tasks,tasks); closeModal(); renderTasks(); renderDashboard();
+    await fsUpdate("tasks",t.id,t); closeModal();
     showToast("Tâche mise à jour.","success");
   });
 }
 function deleteTask(id){
   if(!confirm("Supprimer cette tâche ?"))return;
-  tasks=tasks.filter(t=>t.id!==id); save(KEYS.tasks,tasks); renderTasks(); renderDashboard();
+  await fsDelete("tasks",id);
   showToast("Tâche supprimée.","info");
 }
 
@@ -756,8 +848,8 @@ document.getElementById("btnAddOrder").addEventListener("click",()=>{
     if(!supplier){showToast("Le fournisseur est obligatoire.","error");return;}
     const items=readProductLines();
     if(!items.length){showToast("Ajoutez au moins un produit.","error");return;}
-    orders.push({id:uid(),supplier,date:mval("fDate"),status:mval("fOStatus"),building:mval("fOBuilding"),notes:mval("fNotes"),items});
-    save(KEYS.orders,orders); closeModal(); renderOrders(); renderDashboard();
+    const newOrder={id:uid(),supplier,date:mval("fDate"),status:mval("fOStatus"),building:mval("fOBuilding"),notes:mval("fNotes"),items};
+    await fsAdd("orders",newOrder); closeModal();
     showToast("Commande ajoutée !","success");
   });
   setTimeout(bindOrderForm,0);
@@ -770,14 +862,14 @@ function editOrder(id){
     const items=readProductLines();
     if(!items.length){showToast("Ajoutez au moins un produit.","error");return;}
     Object.assign(o,{supplier,date:mval("fDate"),status:mval("fOStatus"),building:mval("fOBuilding"),notes:mval("fNotes"),items});
-    save(KEYS.orders,orders); closeModal(); renderOrders(); renderDashboard();
+    await fsUpdate("orders",o.id,o); closeModal();
     showToast("Commande mise à jour.","success");
   });
   setTimeout(bindOrderForm,0);
 }
 function deleteOrder(id){
   if(!confirm("Supprimer cette commande ?"))return;
-  orders=orders.filter(o=>o.id!==id); save(KEYS.orders,orders); renderOrders(); renderDashboard();
+  await fsDelete("orders",id);
   showToast("Commande supprimée.","info");
 }
 
@@ -865,8 +957,8 @@ function spaceFormHTML(s={}){
 document.getElementById("btnAddSpace").addEventListener("click",()=>{
   openModal("Nouvelle place de parking",spaceFormHTML(),()=>{
     const name=mval("fSName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
-    spaces.push({id:uid(),name,building:mval("fSBuilding"),type:mval("fSType"),notes:mval("fSNotes")});
-    save(KEYS.spaces,spaces); closeModal(); renderSpaces(); renderDashboard();
+    const newSpace={id:uid(),name,building:mval("fSBuilding"),type:mval("fSType"),notes:mval("fSNotes")};
+    await fsAdd("spaces",newSpace); closeModal();
     showToast("Place ajoutée !","success");
   });
 });
@@ -875,13 +967,13 @@ function editSpace(id){
   openModal("Modifier la place",spaceFormHTML(s),()=>{
     const name=mval("fSName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     Object.assign(s,{name,building:mval("fSBuilding"),type:mval("fSType"),notes:mval("fSNotes")});
-    save(KEYS.spaces,spaces); closeModal(); renderSpaces(); renderDashboard();
+    await fsUpdate("spaces",s.id,s); closeModal();
     showToast("Place mise à jour.","success");
   });
 }
 function deleteSpace(id){
   if(!confirm("Supprimer cette place ?"))return;
-  spaces=spaces.filter(s=>s.id!==id); save(KEYS.spaces,spaces); renderSpaces(); renderDashboard();
+  await fsDelete("spaces",id);
   showToast("Place supprimée.","info");
 }
 
@@ -908,8 +1000,8 @@ function aptFormHTML(a={}){
 document.getElementById("btnAddApt").addEventListener("click",()=>{
   openModal("Nouvel appartement libre",aptFormHTML(),()=>{
     const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
-    apts.push({id:uid(),name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")});
-    save(KEYS.apts,apts); closeModal(); renderSpaces(); renderDashboard();
+    const newApt={id:uid(),name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")};
+    await fsAdd("apts",newApt); closeModal();
     showToast("Appartement ajouté !","success");
   });
 });
@@ -918,22 +1010,30 @@ function editApt(id){
   openModal("Modifier l'appartement",aptFormHTML(a),()=>{
     const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
     Object.assign(a,{name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")});
-    save(KEYS.apts,apts); closeModal(); renderSpaces(); renderDashboard();
+    await fsUpdate("apts",a.id,a); closeModal();
     showToast("Appartement mis à jour.","success");
   });
 }
 function deleteApt(id){
   if(!confirm("Supprimer cet appartement ?"))return;
-  apts=apts.filter(a=>a.id!==id); save(KEYS.apts,apts); renderSpaces(); renderDashboard();
+  await fsDelete("apts",id);
   showToast("Appartement supprimé.","info");
 }
 
 /* ============================================================
    18. DONNÉES DE DÉMO
    ============================================================ */
-function seedDemoData(){
-  if(tasks.length||orders.length||spaces.length||apts.length)return;
-  tasks=[
+/* ============================================================
+   19. DONNÉES DE DÉMO — insérées dans Firestore si tout est vide
+   ============================================================ */
+async function seedDemoData() {
+  // Vérifier si Firestore est déjà peuplé
+  const snap = await col("tasks").limit(1).get();
+  if (!snap.empty) return; // Déjà des données → on ne touche pas
+
+  showToast("Premier lancement — ajout des données de démo…", "info");
+
+  const demoTasks = [
     {id:uid(),title:"Tondre la pelouse (côté rue)",        building:BUILDINGS[0],priority:"medium",status:"todo",      description:"Secteur principal et bordures"},
     {id:uid(),title:"Remplacer ampoules couloir 2e étage", building:BUILDINGS[2],priority:"high",  status:"todo",      description:"3 ampoules E27 à changer"},
     {id:uid(),title:"Nettoyage salle de poubelles",        building:BUILDINGS[4],priority:"high",  status:"inprogress",description:""},
@@ -941,7 +1041,7 @@ function seedDemoData(){
     {id:uid(),title:"Débouchage gouttière nord",           building:BUILDINGS[3],priority:"low",   status:"todo",      description:""},
     {id:uid(),title:"Révision interphone appt 12",         building:BUILDINGS[0],priority:"medium",status:"done",      description:""},
   ];
-  orders=[
+  const demoOrders = [
     {id:uid(),supplier:"Hornbach",  date:"2025-06-01",status:"received",building:BUILDINGS[2],notes:"Commande urgente",
      items:[{id:uid(),name:"Ampoules LED E27",qty:"20",unit:"pcs",notes:"Réf. LED-E27-10W"},{id:uid(),name:"Câble électrique 2.5mm",qty:"5",unit:"m",notes:""}]},
     {id:uid(),supplier:"Migros Pro",date:"2025-06-05",status:"ordered", building:"",           notes:"Livraison jeudi",
@@ -949,34 +1049,61 @@ function seedDemoData(){
     {id:uid(),supplier:"Decora",    date:"2025-06-10",status:"pending",  building:BUILDINGS[5],notes:"Pour retouches hall",
      items:[{id:uid(),name:"Peinture blanc mat",qty:"10",unit:"L",notes:"RAL 9010"},{id:uid(),name:"Rouleaux peinture",qty:"4",unit:"pcs",notes:""}]},
   ];
-  spaces=[
+  const demoSpaces = [
     {id:uid(),name:"Place 3",  building:BUILDINGS[0],type:"indoor",  notes:""},
     {id:uid(),name:"Place 11", building:BUILDINGS[1],type:"outdoor", notes:""},
     {id:uid(),name:"Place P4", building:BUILDINGS[3],type:"indoor",  notes:"Handicapé"},
   ];
-  apts=[
+  const demoApts = [
     {id:uid(),name:"Appartement 8A",building:BUILDINGS[2],floor:"4e",             rooms:"4.5",notes:"Disponible dès le 1er juillet"},
     {id:uid(),name:"Studio 2",      building:BUILDINGS[4],floor:"Rez-de-chaussée",rooms:"1.5",notes:"Travaux de peinture à prévoir"},
   ];
-  save(KEYS.tasks,tasks); save(KEYS.orders,orders); save(KEYS.spaces,spaces); save(KEYS.apts,apts);
+
+  // Écriture en batch (plus efficace)
+  const batch = db.batch();
+  [...demoTasks] .forEach(d => { const {id,...r}=d; batch.set(col("tasks" ).doc(id), r); });
+  [...demoOrders].forEach(d => { const {id,...r}=d; batch.set(col("orders").doc(id), r); });
+  [...demoSpaces].forEach(d => { const {id,...r}=d; batch.set(col("spaces").doc(id), r); });
+  [...demoApts]  .forEach(d => { const {id,...r}=d; batch.set(col("apts"  ).doc(id), r); });
+  await batch.commit();
 }
 
 /* ============================================================
-   19. INITIALISATION DE L'APPLICATION (après connexion)
+   20. INITIALISATION DE L'APPLICATION (après connexion)
    ============================================================ */
-function initApp(){
-  seedDemoData();
+async function initApp() {
+  // Initialiser Firebase
+  const ok = initFirebase();
+  if (!ok) {
+    showToast("⚠️ Firebase non configuré — remplis firebase-config.js !", "error");
+    return;
+  }
+
+  // Charger les configs
+  await Promise.all([syncPasswordFromFirestore(), loadBuildings()]);
+
+  // Peupler les données de démo si c'est la première fois
+  await seedDemoData();
+
+  // Démarrer les écouteurs temps réel
+  startListeners();
+
+  // Mettre à jour l'interface
   refreshBuildingSelects();
   bindTaskFilters();
   bindOrderFilters();
   bindSpaceFilter();
   renderDashboard();
+
+  // Indicateur de connexion dans la sidebar
+  const foot = document.querySelector(".user-role");
+  if (foot) foot.textContent = "☁️ Synchronisé Firebase";
 }
 
 /* ============================================================
-   20. DÉMARRAGE
+   21. DÉMARRAGE
    ============================================================ */
-if(isLoggedIn()){
+if (isLoggedIn()) {
   hideLogin();
   initApp();
 } else {
