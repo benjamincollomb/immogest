@@ -1178,6 +1178,7 @@ async function initApp() {
   await seedDemoData();
   startListeners();
   startComptaListener();   // écoute les transactions comptabilité
+  startArchiveListener();  // écoute les dossiers archives
   refreshBuildingSelects();
   bindTaskFilters();
   bindOrderFilters();
@@ -1491,21 +1492,22 @@ function startComptaListener() {
     });
 }
 
-/* ---- Calculer les soldes actuels ---- */
+/* ---- Calculer les soldes actuels (ignore les entrées en attente) ---- */
 function getSoldes() {
-  // Le solde le plus récent est dans le premier doc (trié desc)
-  if (transactions.length === 0) return { coffre: 0, banque: 0 };
-  const last = transactions[0]; // dernier en date
-  return {
-    coffre: last.soldeCoffre || 0,
-    banque: last.soldeBanque || 0
-  };
+  // Exclure les transactions en attente du calcul des soldes
+  const confirmed = transactions.filter(t => t.status !== "pending");
+  if (!confirmed.length) return { coffre: 0, banque: 0 };
+  const last = confirmed[0]; // dernier confirmé, trié desc
+  return { coffre: last.soldeCoffre || 0, banque: last.soldeBanque || 0 };
 }
 
 /* ---- Formater un montant en CHF ---- */
 function chf(n) {
   return parseFloat(n || 0).toFixed(2) + " CHF";
 }
+
+/* ---- Vue active ---- */
+let currentComptaView = "all"; // "all" | "archives"
 
 /* ---- Rendre l'onglet comptabilité ---- */
 function renderCompta() {
@@ -1514,79 +1516,11 @@ function renderCompta() {
   document.getElementById("soldeBanque").textContent = chf(banque);
   document.getElementById("soldeTotal").textContent  = chf(coffre + banque);
 
-  const filterType = document.getElementById("filterComptaType").value;
-  let list = [...transactions];
-  if (filterType) list = list.filter(t => t.type === filterType);
-
-  const container = document.getElementById("comptaHistory");
-  if (!list.length) {
-    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction enregistrée</p>`;
-    return;
+  if (currentComptaView === "archives") {
+    renderArchiveView();
+  } else {
+    renderAllTransactions();
   }
-
-  const TYPE_LABELS = {
-    entree:   '<span class="tag tag-entree">Entrée coffre</span>',
-    virement: '<span class="tag tag-virement">Coffre → Banque</span>',
-    sortie:   '<span class="tag tag-sortie">Sortie banque</span>',
-  };
-
-  container.innerHTML = `
-    <table class="compta-table">
-      <thead>
-        <tr>
-          <th>Date & heure</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th style="text-align:right">+ Coffre</th>
-          <th style="text-align:right">− Coffre</th>
-          <th style="text-align:right">− Banque</th>
-          <th style="text-align:right">💰 Coffre</th>
-          <th style="text-align:right">🏦 Banque</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${list.map(t => {
-          const isE = t.type === "entree";
-          const isV = t.type === "virement";
-          const isS = t.type === "sortie";
-          return `
-          <tr>
-            <td class="td-date">${formatDateFull(t.date)}</td>
-            <td>${TYPE_LABELS[t.type] || t.type}</td>
-            <td class="td-desc">${escHtml(t.description || "—")}</td>
-            <td class="amount-col">${isE ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
-            <td class="amount-col">${isV ? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
-            <td class="amount-col">${isS ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
-            <td class="mini-solde mini-coffre">${chf(t.soldeCoffre)}</td>
-            <td class="mini-solde mini-banque">${chf(t.soldeBanque)}</td>
-            <td>
-              <button class="btn-icon delete" data-compta-id="${t.id}" title="Supprimer">
-                <i class="fa-solid fa-trash"></i>
-              </button>
-            </td>
-          </tr>`;
-        }).join("")}
-      </tbody>
-    </table>`;
-
-  container.querySelectorAll("[data-compta-id]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Supprimer cette transaction ?\nAttention : les soldes ne seront pas recalculés automatiquement.")) return;
-      await fsDelete("transactions", btn.dataset.comptaId);
-      showToast("Transaction supprimée.", "info");
-    });
-  });
-}
-
-function formatDateFull(iso) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("fr-CH", {
-      day: "2-digit", month: "2-digit", year: "numeric",
-      hour: "2-digit", minute: "2-digit"
-    });
-  } catch { return iso; }
 }
 
 /* ---- Formulaire de saisie d'une transaction ---- */
@@ -1632,7 +1566,15 @@ function comptaFormHTML(type) {
     <div class="form-group">
       <label>Date & heure</label>
       <input id="fComptaDate" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/>
-    </div>`;
+    </div>
+    ${type === "entree" ? `
+    <label class="pending-checkbox-wrap" for="fComptaPending">
+      <input type="checkbox" id="fComptaPending"/>
+      <div>
+        <div class="pending-cb-title"><i class="fa-solid fa-clock"></i> En attente</div>
+        <div class="pending-cb-desc">Le locataire paiera plus tard — n'affecte pas le solde du coffre</div>
+      </div>
+    </label>` : ""}`;
 }
 
 /* ---- Enregistrer une transaction ---- */
@@ -1648,7 +1590,25 @@ async function saveTransaction(type) {
 
   const { coffre: coffreAct, banque: banqueAct } = getSoldes();
 
-  // Calculer les nouveaux soldes
+  // Vérifier si l'entrée est "en attente"
+  const pendingEl = document.getElementById("fComptaPending");
+  const isPending = type === "entree" && pendingEl && pendingEl.checked;
+
+  if (isPending) {
+    // Entrée en attente : enregistrée mais ne modifie pas le solde
+    const newDoc = {
+      id: uid(), type: "entree", status: "pending",
+      montant, description, date,
+      soldeCoffre: coffreAct,   // solde inchangé
+      soldeBanque: banqueAct,
+    };
+    await fsAdd("transactions", newDoc);
+    closeModal();
+    showToast(`Entrée en attente enregistrée — ${chf(montant)}`, "info");
+    return true;
+  }
+
+  // Calculer les nouveaux soldes pour une transaction confirmée
   let newCoffre = coffreAct;
   let newBanque = banqueAct;
 
@@ -1668,19 +1628,38 @@ async function saveTransaction(type) {
   }
 
   const newDoc = {
-    id:           uid(),
-    type,
-    montant,
-    description,
-    date,
-    soldeCoffre:  newCoffre,
-    soldeBanque:  newBanque,
+    id: uid(), type, status: "confirmed",
+    montant, description, date,
+    soldeCoffre: newCoffre,
+    soldeBanque: newBanque,
   };
 
   await fsAdd("transactions", newDoc);
   closeModal();
   showToast("Transaction enregistrée ✓", "success");
   return true;
+}
+
+/* ---- Confirmer un paiement en attente ---- */
+async function confirmPendingEntry(id) {
+  const t = transactions.find(t => t.id === id);
+  if (!t || t.status !== "pending") return;
+
+  const { coffre, banque } = getSoldes();
+  const newCoffre = Math.round((coffre + t.montant) * 100) / 100;
+
+  const newDoc = {
+    id: uid(), type: "entree", status: "confirmed",
+    montant: t.montant,
+    description: t.description,
+    date: new Date().toISOString(),
+    soldeCoffre: newCoffre,
+    soldeBanque: banque,
+  };
+
+  await fsAdd("transactions", newDoc);
+  await fsDelete("transactions", id);
+  showToast(`Paiement confirmé ! +${chf(t.montant)} au coffre`, "success");
 }
 
 /* ---- Boutons d'action ---- */
@@ -1702,6 +1681,344 @@ document.getElementById("btnSortie").addEventListener("click", () => {
 
 /* ---- Filtre ---- */
 document.getElementById("filterComptaType").addEventListener("change", renderCompta);
+
+/* ============================================================
+   23. COMPTABILITÉ — renderAllTransactions (avec "En attente")
+   ============================================================ */
+function renderAllTransactions() {
+  const filterType = document.getElementById("filterComptaType").value;
+  let list = [...transactions];
+
+  if (filterType === "pending") {
+    list = list.filter(t => t.status === "pending");
+  } else if (filterType) {
+    list = list.filter(t => t.type === filterType && t.status !== "pending");
+  }
+
+  const container = document.getElementById("comptaHistory");
+  if (!list.length) {
+    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>`;
+    return;
+  }
+
+  // Compter les entrées en attente pour le bandeau
+  const pendingCount = transactions.filter(t => t.status === "pending").length;
+  const pendingBanner = pendingCount && filterType !== "pending" ? `
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem 1.25rem;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:.83rem;cursor:pointer"
+         onclick="document.getElementById('filterComptaType').value='pending';renderCompta()">
+      <i class="fa-solid fa-clock" style="color:#d97706"></i>
+      <span style="color:#92400e;font-weight:600">${pendingCount} entrée${pendingCount>1?"s":""} en attente de paiement</span>
+      <span style="color:#a16207;margin-left:auto">Voir →</span>
+    </div>` : "";
+
+  const TYPE_LABELS = {
+    entree:   (s) => s === "pending"
+      ? '<span class="tag tag-pending"><i class="fa-solid fa-clock"></i> En attente</span>'
+      : '<span class="tag tag-entree">Entrée coffre</span>',
+    virement: () => '<span class="tag tag-virement">Coffre → Banque</span>',
+    sortie:   () => '<span class="tag tag-sortie">Sortie banque</span>',
+  };
+
+  container.innerHTML = pendingBanner + `
+    <div style="overflow-x:auto">
+    <table class="compta-table">
+      <thead>
+        <tr>
+          <th>Date & heure</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th style="text-align:right">+ Coffre</th>
+          <th style="text-align:right">− Coffre</th>
+          <th style="text-align:right">− Banque</th>
+          <th style="text-align:right">💰 Coffre</th>
+          <th style="text-align:right">🏦 Banque</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${list.map(t => {
+          const isE = t.type === "entree";
+          const isV = t.type === "virement";
+          const isS = t.type === "sortie";
+          const isPend = t.status === "pending";
+          const rowClass = isPend ? "row-pending" : "";
+          const labelFn = TYPE_LABELS[t.type] || (() => t.type);
+          return `
+          <tr class="${rowClass}">
+            <td class="td-date">${formatDateFull(t.date)}</td>
+            <td>${labelFn(t.status)}</td>
+            <td class="td-desc">${escHtml(t.description || "—")}</td>
+            <td class="amount-col">${isE && !isPend ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : isPend ? `<span style="color:#d97706;font-family:'DM Mono',monospace;font-size:.85rem">(${chf(t.montant)})</span>` : `<span class="amount-dash">—</span>`}</td>
+            <td class="amount-col">${isV ? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
+            <td class="amount-col">${isS ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
+            <td class="mini-solde mini-coffre">${isPend ? '<span style="color:var(--text-light);font-size:.75rem">—</span>' : chf(t.soldeCoffre)}</td>
+            <td class="mini-solde mini-banque">${isPend ? '<span style="color:var(--text-light);font-size:.75rem">—</span>' : chf(t.soldeBanque)}</td>
+            <td>
+              <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:nowrap">
+                ${isPend ? `<button class="confirm-pay-btn" data-confirm-id="${t.id}"><i class="fa-solid fa-check"></i> Confirmer</button>` : ""}
+                <button class="btn-icon delete" data-compta-id="${t.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+    </div>`;
+
+  // Confirmer paiement en attente
+  container.querySelectorAll("[data-confirm-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(`Confirmer la réception de ce paiement ?`)) return;
+      await confirmPendingEntry(btn.dataset.confirmId);
+    });
+  });
+
+  // Supprimer
+  container.querySelectorAll("[data-compta-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Supprimer cette transaction ?")) return;
+      await fsDelete("transactions", btn.dataset.comptaId);
+      showToast("Transaction supprimée.", "info");
+    });
+  });
+}
+
+/* ============================================================
+   24. ARCHIVES — Dossiers de transactions
+   Collection Firestore : "archives"
+   ============================================================ */
+let archives     = [];
+let unsubArchives = null;
+
+function startArchiveListener() {
+  if (unsubArchives) unsubArchives();
+  unsubArchives = col("archives").onSnapshot(snap => {
+    archives = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (currentComptaView === "archives") renderArchiveView();
+  }, err => { if (err.code === "permission-denied") showFirestorePermissionWarning(); });
+}
+
+/* ---- Formulaire de création d'archive ---- */
+function archiveFormHTML(a = {}) {
+  const today = new Date().toISOString().split("T")[0];
+  return `
+    <div class="form-group">
+      <label>Nom du dossier *</label>
+      <input id="fArchiveName" type="text"
+             placeholder="Ex : Factures 17.04 - 30.04.2026"
+             value="${escHtml(a.name || "")}"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date de début</label>
+        <input id="fArchiveStart" type="date" value="${a.dateStart || today}"/>
+      </div>
+      <div class="form-group">
+        <label>Date de fin</label>
+        <input id="fArchiveEnd" type="date" value="${a.dateEnd || today}"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Description (optionnel)</label>
+      <input id="fArchiveDesc" type="text"
+             placeholder="Période, remarques…"
+             value="${escHtml(a.description || "")}"/>
+    </div>`;
+}
+
+/* ---- Vue Archives ---- */
+function renderArchiveView() {
+  const container = document.getElementById("comptaHistory");
+
+  if (!archives.length) {
+    container.innerHTML = `
+      <div class="archives-empty">
+        <i class="fa-solid fa-folder-open"></i>
+        Aucun dossier d'archive.<br>
+        <span style="font-size:.82rem">Crée un dossier pour regrouper tes transactions par période.</span>
+      </div>`;
+    return;
+  }
+
+  const TYPE_LABELS = {
+    entree:   '<span class="tag tag-entree" style="font-size:.68rem">Entrée</span>',
+    virement: '<span class="tag tag-virement" style="font-size:.68rem">Virement</span>',
+    sortie:   '<span class="tag tag-sortie" style="font-size:.68rem">Sortie</span>',
+  };
+
+  // Construire le HTML de chaque dossier
+  container.innerHTML = archives.map(arch => {
+    const archTx = transactions.filter(t => t.archiveId === arch.id && t.status !== "pending");
+    const totalIn  = archTx.filter(t => t.type === "entree").reduce((s,t) => s + t.montant, 0);
+    const totalOut = archTx.filter(t => t.type === "sortie" || t.type === "virement").reduce((s,t) => s + t.montant, 0);
+    const txRows = archTx.length ? `
+      <div style="overflow-x:auto">
+      <table class="compta-table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Type</th><th>Description</th>
+            <th style="text-align:right">Montant</th>
+            <th style="text-align:right">💰 Coffre</th>
+            <th style="text-align:right">🏦 Banque</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${archTx.map(t => `
+            <tr>
+              <td class="td-date">${formatDateFull(t.date)}</td>
+              <td>${TYPE_LABELS[t.type] || ""}</td>
+              <td class="td-desc">${escHtml(t.description||"—")}</td>
+              <td class="amount-col">
+                ${t.type==="entree"  ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : ""}
+                ${t.type==="sortie"  ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : ""}
+                ${t.type==="virement"? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : ""}
+              </td>
+              <td class="mini-solde mini-coffre">${chf(t.soldeCoffre)}</td>
+              <td class="mini-solde mini-banque">${chf(t.soldeBanque)}</td>
+              <td>
+                <button class="btn-icon delete" data-remove-from-archive="${t.id}" title="Retirer du dossier">
+                  <i class="fa-solid fa-folder-minus"></i>
+                </button>
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      </div>` : `<p class="empty-msg" style="padding:1.2rem"><i class="fa-solid fa-inbox"></i>Aucune transaction dans ce dossier</p>`;
+
+    return `
+      <div class="archive-folder" data-archive-id="${arch.id}">
+        <div class="archive-folder-header" data-toggle="${arch.id}">
+          <div class="archive-folder-icon" id="arch-icon-${arch.id}">
+            <i class="fa-solid fa-folder"></i>
+          </div>
+          <div class="archive-folder-info">
+            <div class="archive-folder-name">${escHtml(arch.name)}</div>
+            <div class="archive-folder-meta">
+              ${arch.dateStart ? `<span>📅 ${formatDate(arch.dateStart)} → ${formatDate(arch.dateEnd || arch.dateStart)}</span>` : ""}
+              <span>${archTx.length} transaction${archTx.length!==1?"s":""}</span>
+              ${totalIn  ? `<span class="archive-stat-in">+${chf(totalIn)}</span>` : ""}
+              ${totalOut ? `<span class="archive-stat-out">−${chf(totalOut)}</span>` : ""}
+            </div>
+          </div>
+          <div class="archive-folder-right">
+            <button class="btn-icon delete" data-delete-archive="${arch.id}" title="Supprimer le dossier">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+            <i class="fa-solid fa-chevron-down archive-chevron" id="arch-chev-${arch.id}"></i>
+          </div>
+        </div>
+        <div class="archive-folder-body" id="arch-body-${arch.id}">
+          ${txRows}
+          <!-- Ajouter des transactions non archivées -->
+          <div style="padding:.75rem 1.25rem;border-top:1px solid var(--border);background:var(--white)">
+            <select id="arch-add-select-${arch.id}" class="compta-filter" style="margin-right:.5rem;min-width:220px">
+              <option value="">Ajouter une transaction à ce dossier…</option>
+              ${transactions.filter(t => !t.archiveId && t.status !== "pending").map(t =>
+                `<option value="${t.id}">${formatDateFull(t.date)} — ${escHtml(t.description||t.type)} (${chf(t.montant)})</option>`
+              ).join("")}
+            </select>
+            <button class="btn btn-secondary" data-add-to-archive="${arch.id}" style="padding:.35rem .75rem;font-size:.8rem">
+              <i class="fa-solid fa-plus"></i> Ajouter
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  // Toggle ouverture dossier
+  container.querySelectorAll("[data-toggle]").forEach(el => {
+    el.addEventListener("click", e => {
+      if (e.target.closest("[data-delete-archive]")) return;
+      const id = el.dataset.toggle;
+      const body = document.getElementById(`arch-body-${id}`);
+      const icon = document.getElementById(`arch-icon-${id}`);
+      const chev = document.getElementById(`arch-chev-${id}`);
+      body.classList.toggle("open");
+      chev.classList.toggle("open");
+      icon.classList.toggle("open");
+      if (body.classList.contains("open")) {
+        icon.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
+      } else {
+        icon.innerHTML = '<i class="fa-solid fa-folder"></i>';
+      }
+    });
+  });
+
+  // Supprimer un dossier
+  container.querySelectorAll("[data-delete-archive]").forEach(btn => {
+    btn.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!confirm("Supprimer ce dossier ?\nLes transactions ne seront pas supprimées.")) return;
+      // Retirer l'archiveId de toutes les transactions du dossier
+      const archId = btn.dataset.deleteArchive;
+      const archTx = transactions.filter(t => t.archiveId === archId);
+      await Promise.all(archTx.map(t => fsUpdate("transactions", t.id, { ...t, archiveId: null })));
+      await fsDelete("archives", archId);
+      showToast("Dossier supprimé.", "info");
+    });
+  });
+
+  // Retirer une transaction d'un dossier
+  container.querySelectorAll("[data-remove-from-archive]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const t = transactions.find(t => t.id === btn.dataset.removeFromArchive);
+      if (!t) return;
+      await fsUpdate("transactions", t.id, { ...t, archiveId: null });
+      showToast("Transaction retirée du dossier.", "info");
+    });
+  });
+
+  // Ajouter une transaction à un dossier
+  container.querySelectorAll("[data-add-to-archive]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const archId  = btn.dataset.addToArchive;
+      const selectEl = document.getElementById(`arch-add-select-${archId}`);
+      const txId    = selectEl.value;
+      if (!txId) { showToast("Sélectionne une transaction.", "info"); return; }
+      const t = transactions.find(t => t.id === txId);
+      if (!t) return;
+      await fsUpdate("transactions", t.id, { ...t, archiveId: archId });
+      showToast("Transaction ajoutée au dossier !", "success");
+    });
+  });
+}
+
+/* ---- Boutons onglets vue ---- */
+document.getElementById("viewTabAll").addEventListener("click", () => {
+  currentComptaView = "all";
+  document.getElementById("viewTabAll").classList.add("active");
+  document.getElementById("viewTabArchives").classList.remove("active");
+  document.getElementById("filterComptaType").classList.remove("hidden");
+  document.getElementById("btnCreateArchive").classList.add("hidden");
+  renderCompta();
+});
+document.getElementById("viewTabArchives").addEventListener("click", () => {
+  currentComptaView = "archives";
+  document.getElementById("viewTabArchives").classList.add("active");
+  document.getElementById("viewTabAll").classList.remove("active");
+  document.getElementById("filterComptaType").classList.add("hidden");
+  document.getElementById("btnCreateArchive").classList.remove("hidden");
+  renderCompta();
+});
+
+/* ---- Créer un dossier ---- */
+document.getElementById("btnCreateArchive").addEventListener("click", () => {
+  openModal("Nouveau dossier d'archive", archiveFormHTML(), async () => {
+    const name = mval("fArchiveName");
+    if (!name) { showToast("Le nom est obligatoire.", "error"); return; }
+    await fsAdd("archives", {
+      id: uid(), name,
+      dateStart:   mval("fArchiveStart"),
+      dateEnd:     mval("fArchiveEnd"),
+      description: mval("fArchiveDesc"),
+      createdAt:   new Date().toISOString(),
+    });
+    closeModal();
+    showToast(`Dossier "${name}" créé !`, "success");
+  });
+});
 
 TAB_TITLES["compta"] = "Comptabilité";
 

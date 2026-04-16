@@ -518,19 +518,36 @@
 
       </div>
 
-      <!-- ===== HISTORIQUE ===== -->
+      <!-- ===== HISTORIQUE + ARCHIVES ===== -->
       <div class="compta-history-wrap">
         <div class="compta-history-header">
           <div class="compta-history-title">
             <i class="fa-solid fa-clock-rotate-left"></i>
-            <span>Historique des transactions</span>
+            <span>Historique</span>
           </div>
-          <select id="filterComptaType" class="compta-filter">
-            <option value="">Toutes les transactions</option>
-            <option value="entree">Entrées coffre</option>
-            <option value="virement">Coffre → Banque</option>
-            <option value="sortie">Sorties banque</option>
-          </select>
+          <div class="compta-header-controls">
+            <!-- Onglets vue -->
+            <div class="compta-view-tabs">
+              <button class="compta-view-tab active" id="viewTabAll">
+                <i class="fa-solid fa-list"></i> Transactions
+              </button>
+              <button class="compta-view-tab" id="viewTabArchives">
+                <i class="fa-solid fa-folder-open"></i> Archives
+              </button>
+            </div>
+            <!-- Filtre (vue transactions) -->
+            <select id="filterComptaType" class="compta-filter">
+              <option value="">Toutes</option>
+              <option value="entree">Entrées coffre</option>
+              <option value="virement">Coffre → Banque</option>
+              <option value="sortie">Sorties banque</option>
+              <option value="pending">En attente</option>
+            </select>
+            <!-- Bouton nouvelle archive (vue archives) -->
+            <button class="btn btn-secondary hidden" id="btnCreateArchive" style="padding:.4rem .9rem;font-size:.82rem">
+              <i class="fa-solid fa-folder-plus"></i> Nouveau dossier
+            </button>
+          </div>
         </div>
         <div class="compta-history" id="comptaHistory">
           <p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>
