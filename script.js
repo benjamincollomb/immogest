@@ -1177,6 +1177,7 @@ async function initApp() {
   await loadBuildings();
   await seedDemoData();
   startListeners();
+  startComptaListener();   // écoute les transactions comptabilité
   refreshBuildingSelects();
   bindTaskFilters();
   bindOrderFilters();
@@ -1702,15 +1703,6 @@ document.getElementById("btnSortie").addEventListener("click", () => {
 /* ---- Filtre ---- */
 document.getElementById("filterComptaType").addEventListener("change", renderCompta);
 
-/* ---- Ajouter startComptaListener dans initApp ---- */
-// (Patché dans initApp ci-dessous via override)
-const _origStartListeners = startListeners;
-function startListeners() {
-  _origStartListeners();
-  startComptaListener();
-}
-
-/* ---- Ajouter "compta" dans TAB_TITLES et switchTab ---- */
 TAB_TITLES["compta"] = "Comptabilité";
 
 })();
