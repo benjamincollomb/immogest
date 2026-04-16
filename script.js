@@ -60,16 +60,41 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 let tasks=[], orders=[], spaces=[], apts=[];
 let unsubTasks=null, unsubOrders=null, unsubSpaces=null, unsubApts=null;
 
+function showFirestorePermissionWarning() {
+  // Afficher un bandeau d'avertissement si les règles Firestore sont expirées
+  if (document.getElementById("firestoreWarning")) return;
+  const banner = document.createElement("div");
+  banner.id = "firestoreWarning";
+  banner.style.cssText = `
+    position:fixed;top:0;left:0;right:0;z-index:9999;
+    background:#dc2626;color:#fff;padding:.75rem 1.5rem;
+    display:flex;align-items:center;gap:1rem;font-size:.88rem;font-weight:600;
+    box-shadow:0 2px 8px rgba(0,0,0,.3);
+  `;
+  banner.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation" style="font-size:1.1rem;flex-shrink:0"></i>
+    <span>⚠️ Règles Firestore expirées — Va sur 
+      <a href="https://console.firebase.google.com/project/immogest-e11ff/firestore/rules" 
+         target="_blank" style="color:#fde68a;text-decoration:underline">Firebase Console → Firestore → Règles</a>
+      et remets le mode test (30 jours) ou copie les règles indiquées dans le README.
+    </span>
+    <button onclick="this.parentElement.remove()" style="margin-left:auto;background:rgba(255,255,255,.2);border:none;color:#fff;padding:.3rem .7rem;border-radius:4px;cursor:pointer;font-size:.85rem">✕</button>
+  `;
+  document.body.prepend(banner);
+}
+
 function startListeners() {
   if(unsubTasks)  unsubTasks();
   if(unsubOrders) unsubOrders();
   if(unsubSpaces) unsubSpaces();
   if(unsubApts)   unsubApts();
 
-  unsubTasks  = col("tasks" ).onSnapshot(s=>{ tasks  = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-tasks" ).classList.contains("active")) renderTasks();  });
-  unsubOrders = col("orders").onSnapshot(s=>{ orders = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-orders").classList.contains("active")) renderOrders(); });
-  unsubSpaces = col("spaces").onSnapshot(s=>{ spaces = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); });
-  unsubApts   = col("apts"  ).onSnapshot(s=>{ apts   = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); });
+  const onErr = err => { if(err.code==="permission-denied") showFirestorePermissionWarning(); };
+
+  unsubTasks  = col("tasks" ).onSnapshot(s=>{ tasks  = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-tasks" ).classList.contains("active")) renderTasks();  }, onErr);
+  unsubOrders = col("orders").onSnapshot(s=>{ orders = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-orders").classList.contains("active")) renderOrders(); }, onErr);
+  unsubSpaces = col("spaces").onSnapshot(s=>{ spaces = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); }, onErr);
+  unsubApts   = col("apts"  ).onSnapshot(s=>{ apts   = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); }, onErr);
 }
 
 async function fsAdd(col_name, data)              { const {id,...r}=data; await col(col_name).doc(id).set(r); return id; }
@@ -1451,11 +1476,18 @@ let unsubCompta = null;
 function startComptaListener() {
   if (unsubCompta) unsubCompta();
   unsubCompta = col("transactions")
-    .orderBy("date", "desc")
     .onSnapshot(snap => {
-      transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Tri côté client par date décroissante — pas besoin d'index Firestore
+      transactions = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
       renderCompta();
-    }, err => console.error("compta listener:", err));
+    }, err => {
+      console.error("compta listener:", err);
+      if (err.code === "permission-denied") {
+        showFirestorePermissionWarning();
+      }
+    });
 }
 
 /* ---- Calculer les soldes actuels ---- */
@@ -1487,46 +1519,46 @@ function renderCompta() {
 
   const container = document.getElementById("comptaHistory");
   if (!list.length) {
-    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>`;
+    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction enregistrée</p>`;
     return;
   }
 
   const TYPE_LABELS = {
-    entree:    '<span class="tag tag-entree">Entrée coffre</span>',
-    virement:  '<span class="tag tag-virement">Coffre → Banque</span>',
-    sortie:    '<span class="tag tag-sortie">Sortie banque</span>',
+    entree:   '<span class="tag tag-entree">Entrée coffre</span>',
+    virement: '<span class="tag tag-virement">Coffre → Banque</span>',
+    sortie:   '<span class="tag tag-sortie">Sortie banque</span>',
   };
 
   container.innerHTML = `
     <table class="compta-table">
       <thead>
         <tr>
-          <th>Date</th>
+          <th>Date & heure</th>
           <th>Type</th>
           <th>Description</th>
-          <th style="text-align:right">Entrée coffre</th>
-          <th style="text-align:right">Retrait coffre</th>
-          <th style="text-align:right">Retrait banque</th>
-          <th style="text-align:right">Solde coffre</th>
-          <th style="text-align:right">Solde banque</th>
+          <th style="text-align:right">+ Coffre</th>
+          <th style="text-align:right">− Coffre</th>
+          <th style="text-align:right">− Banque</th>
+          <th style="text-align:right">💰 Coffre</th>
+          <th style="text-align:right">🏦 Banque</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         ${list.map(t => {
-          const isEntree   = t.type === "entree";
-          const isVirement = t.type === "virement";
-          const isSortie   = t.type === "sortie";
+          const isE = t.type === "entree";
+          const isV = t.type === "virement";
+          const isS = t.type === "sortie";
           return `
           <tr>
             <td class="td-date">${formatDateFull(t.date)}</td>
             <td>${TYPE_LABELS[t.type] || t.type}</td>
-            <td class="td-desc">${escHtml(t.description||"")}</td>
-            <td style="text-align:right">${isEntree   ? `<span class="amount-entree">+${chf(t.montant)}</span>`   : '<span class="amount-empty">—</span>'}</td>
-            <td style="text-align:right">${isVirement ? `<span class="amount-virement">-${chf(t.montant)}</span>` : '<span class="amount-empty">—</span>'}</td>
-            <td style="text-align:right">${isSortie   ? `<span class="amount-sortie">-${chf(t.montant)}</span>`   : '<span class="amount-empty">—</span>'}</td>
-            <td style="text-align:right"><span class="td-solde-coffre">${chf(t.soldeCoffre)}</span></td>
-            <td style="text-align:right"><span class="td-solde-banque">${chf(t.soldeBanque)}</span></td>
+            <td class="td-desc">${escHtml(t.description || "—")}</td>
+            <td class="amount-col">${isE ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
+            <td class="amount-col">${isV ? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
+            <td class="amount-col">${isS ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
+            <td class="mini-solde mini-coffre">${chf(t.soldeCoffre)}</td>
+            <td class="mini-solde mini-banque">${chf(t.soldeBanque)}</td>
             <td>
               <button class="btn-icon delete" data-compta-id="${t.id}" title="Supprimer">
                 <i class="fa-solid fa-trash"></i>
@@ -1537,7 +1569,6 @@ function renderCompta() {
       </tbody>
     </table>`;
 
-  // Supprimer une transaction
   container.querySelectorAll("[data-compta-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("Supprimer cette transaction ?\nAttention : les soldes ne seront pas recalculés automatiquement.")) return;

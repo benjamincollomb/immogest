@@ -1694,170 +1694,271 @@ img { display:block; max-width:100%; }
 }
 
 /* ============================================================
-   COMPTABILITÉ
+   COMPTABILITÉ — Design premium
    ============================================================ */
 
-/* ---- Cartes de solde ---- */
+/* ---- Cartes de solde style "carte bancaire" ---- */
 .compta-soldes {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
+  gap: 1.1rem;
   margin-bottom: 1.5rem;
 }
-@media(max-width: 700px) {
-  .compta-soldes { grid-template-columns: 1fr; }
-}
+@media(max-width:760px) { .compta-soldes { grid-template-columns:1fr; } }
 
 .solde-card {
-  background: var(--white);
-  border-radius: var(--radius);
-  padding: 1.4rem 1.5rem;
+  position: relative;
+  border-radius: 16px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 6px 24px rgba(26,38,64,.14);
+  transition: transform .25s ease, box-shadow .25s ease;
+  min-height: 145px;
+  cursor: default;
+}
+.solde-card:hover { transform: translateY(-4px); box-shadow: 0 12px 36px rgba(26,38,64,.2); }
+
+/* Fond dégradé par type */
+.solde-coffre { background: linear-gradient(135deg, #c05a1a 0%, #e8843b 60%, #f5a464 100%); }
+.solde-banque { background: linear-gradient(135deg, #1a3a8f 0%, #1e5cbf 60%, #3b80e8 100%); }
+.solde-total  { background: linear-gradient(135deg, #1a5c36 0%, #276749 55%, #38a169 100%); }
+
+/* Cercle décoratif en fond */
+.solde-card-bg {
+  position: absolute;
+  top: -30px; right: -30px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.08);
+  pointer-events: none;
+}
+.solde-card-bg::after {
+  content: '';
+  position: absolute;
+  top: 30px; right: 30px;
+  width: 90px; height: 90px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+}
+
+.solde-card-inner {
+  position: relative;
+  z-index: 1;
+  padding: 1.35rem 1.4rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.solde-top {
   display: flex;
   align-items: center;
-  gap: 1.1rem;
-  box-shadow: var(--shadow);
-  border-left: 5px solid transparent;
-  transition: transform var(--transition), box-shadow var(--transition);
+  justify-content: space-between;
+  margin-bottom: .75rem;
 }
-.solde-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-
-.solde-coffre   { border-color: #e8843b; }
-.solde-banque   { border-color: #1e5cbf; }
-.solde-total    { border-color: #38a169; }
-
-.solde-icon {
-  width: 50px; height: 50px;
-  border-radius: var(--radius-sm);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.3rem;
-  flex-shrink: 0;
+.solde-label {
+  font-size: .78rem;
+  font-weight: 700;
+  color: rgba(255,255,255,.85);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
 }
-.solde-coffre .solde-icon { background: #fff0e6; color: #e8843b; }
-.solde-banque .solde-icon { background: var(--blue-pale); color: var(--blue); }
-.solde-total  .solde-icon { background: #f0fff4; color: #38a169; }
-
-.solde-label  { font-size: .78rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: .05em; }
+.solde-chip {
+  background: rgba(255,255,255,.18);
+  color: rgba(255,255,255,.9);
+  font-size: .68rem;
+  font-weight: 700;
+  padding: .15rem .55rem;
+  border-radius: 99px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
 .solde-amount {
-  font-size: 1.65rem;
+  font-size: 2rem;
   font-weight: 700;
   font-family: 'DM Mono', monospace;
-  color: var(--navy);
-  margin: .2rem 0 .15rem;
-  line-height: 1;
+  color: #fff;
+  line-height: 1.1;
+  text-shadow: 0 1px 4px rgba(0,0,0,.15);
+  letter-spacing: -.02em;
 }
-.solde-coffre .solde-amount { color: #c05a1a; }
-.solde-banque .solde-amount { color: var(--blue); }
-.solde-total  .solde-amount { color: #276749; }
-.solde-hint   { font-size: .75rem; color: var(--text-light); }
+.solde-hint {
+  font-size: .75rem;
+  color: rgba(255,255,255,.65);
+  margin-top: .5rem;
+}
 
-/* ---- Boutons d'action ---- */
+/* ---- Boutons d'action horizontaux ---- */
 .compta-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-@media(max-width: 700px) {
-  .compta-actions { grid-template-columns: 1fr; }
+  display: flex;
+  flex-direction: column;
+  gap: .65rem;
+  margin-bottom: 1.5rem;
 }
 
 .compta-btn {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: .5rem;
-  padding: 1.4rem 1rem;
+  gap: 1.1rem;
+  padding: 1rem 1.25rem;
   border-radius: var(--radius);
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   cursor: pointer;
   font-family: 'DM Sans', sans-serif;
-  transition: all var(--transition);
-  text-align: center;
+  background: var(--white);
   box-shadow: var(--shadow);
+  transition: all .2s ease;
+  text-align: left;
+  width: 100%;
 }
-.compta-btn > i {
-  font-size: 1.6rem;
-  width: 52px; height: 52px;
-  border-radius: 50%;
+.compta-btn:hover {
+  transform: translateX(4px);
+  box-shadow: var(--shadow-md);
+}
+
+.compta-btn-icon {
+  width: 46px; height: 46px;
+  border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  transition: transform var(--transition);
+  font-size: 1.1rem;
+  flex-shrink: 0;
 }
-.compta-btn:hover > i { transform: scale(1.15); }
+
+.compta-btn-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+}
 .compta-btn-label {
   font-size: .95rem;
   font-weight: 700;
   color: var(--navy);
+  line-height: 1;
 }
 .compta-btn-desc {
   font-size: .78rem;
   color: var(--text-light);
 }
+.compta-btn-arrow {
+  color: var(--border);
+  font-size: .8rem;
+  transition: color .2s, transform .2s;
+  flex-shrink: 0;
+}
+.compta-btn:hover .compta-btn-arrow { transform: translateX(3px); }
 
-.compta-btn-entree  { background: #fff8f0; border-color: #f0c090; }
-.compta-btn-entree:hover  { background: #fff0e0; border-color: #e8843b; box-shadow: 0 4px 16px rgba(232,132,59,.2); }
-.compta-btn-entree > i    { background: #fff0e6; color: #e8843b; }
+/* Couleurs par type */
+.compta-btn-entree  { border-color: #fcd9b4; }
+.compta-btn-entree:hover  { border-color: #e8843b; }
+.compta-btn-entree:hover  .compta-btn-arrow { color: #e8843b; }
+.compta-btn-entree  .compta-btn-icon { background: #fff0e6; color: #e8843b; }
 
-.compta-btn-virement { background: var(--blue-pale); border-color: #a0bcee; }
-.compta-btn-virement:hover { background: #d8e8fa; border-color: var(--blue); box-shadow: 0 4px 16px rgba(30,92,191,.2); }
-.compta-btn-virement > i   { background: #d8e8fa; color: var(--blue); }
+.compta-btn-virement { border-color: #bdd3f5; }
+.compta-btn-virement:hover { border-color: var(--blue); }
+.compta-btn-virement:hover .compta-btn-arrow { color: var(--blue); }
+.compta-btn-virement .compta-btn-icon { background: var(--blue-pale); color: var(--blue); }
 
-.compta-btn-sortie  { background: #f0fff4; border-color: #9ae6b4; }
-.compta-btn-sortie:hover  { background: #e0faea; border-color: #38a169; box-shadow: 0 4px 16px rgba(56,161,105,.2); }
-.compta-btn-sortie > i    { background: #e0faea; color: #38a169; }
+.compta-btn-sortie  { border-color: #a7e9c5; }
+.compta-btn-sortie:hover  { border-color: #38a169; }
+.compta-btn-sortie:hover  .compta-btn-arrow { color: #38a169; }
+.compta-btn-sortie  .compta-btn-icon { background: #f0fff4; color: #38a169; }
 
 /* ---- Historique ---- */
-.compta-history {
-  overflow-x: auto;
+.compta-history-wrap {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
+.compta-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.4rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.compta-history-title {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+.compta-history-title i { color: var(--blue); }
+.compta-filter {
+  padding: .4rem .8rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  background: var(--white);
+  color: var(--text);
+  outline: none;
+  transition: border-color .2s;
+  cursor: pointer;
+}
+.compta-filter:focus { border-color: var(--blue); }
 
-.compta-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .88rem;
-}
+.compta-history { overflow-x: auto; }
+
+/* Table historique */
+.compta-table { width:100%; border-collapse:collapse; font-size:.88rem; }
 .compta-table thead th {
   background: var(--bg);
   color: var(--text-light);
   font-weight: 700;
-  font-size: .72rem;
+  font-size: .7rem;
   text-transform: uppercase;
   letter-spacing: .06em;
-  padding: .8rem 1.1rem;
+  padding: .75rem 1.1rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 .compta-table tbody tr {
   border-bottom: 1px solid var(--slate-light);
-  transition: background var(--transition);
+  transition: background .15s;
 }
 .compta-table tbody tr:last-child { border-bottom: none; }
 .compta-table tbody tr:hover { background: var(--bg); }
-.compta-table td {
-  padding: .85rem 1.1rem;
-  vertical-align: middle;
-}
-.compta-table td.td-date {
+.compta-table td { padding: .8rem 1.1rem; vertical-align: middle; }
+
+.td-date { font-family:'DM Mono',monospace; font-size:.78rem; color:var(--text-light); white-space:nowrap; }
+.td-desc { color:var(--text); font-weight:500; }
+
+/* Badges type */
+.tag-entree   { background:#fff0e6; color:#c05a1a; border:1px solid #fcd9b4; }
+.tag-virement { background:var(--blue-pale); color:var(--blue); border:1px solid #bdd3f5; }
+.tag-sortie   { background:#f0fff4; color:#276749; border:1px solid #a7e9c5; }
+
+/* Montants */
+.amount-col {
   font-family: 'DM Mono', monospace;
-  font-size: .8rem;
-  color: var(--text-light);
+  font-weight: 700;
+  font-size: .9rem;
+  text-align: right;
   white-space: nowrap;
 }
-.compta-table td.td-desc { color: var(--text); font-weight: 500; }
-.compta-table td.td-note { color: var(--text-light); font-size: .82rem; font-style: italic; }
+.amount-entree-val   { color: #c05a1a; }
+.amount-virement-val { color: var(--blue); }
+.amount-sortie-val   { color: #276749; }
+.amount-dash         { color: var(--border); font-size: 1rem; }
 
-/* Montants colorés */
-.amount-entree  { font-family: 'DM Mono', monospace; font-weight: 700; color: #e8843b; }
-.amount-virement{ font-family: 'DM Mono', monospace; font-weight: 700; color: var(--blue); }
-.amount-sortie  { font-family: 'DM Mono', monospace; font-weight: 700; color: #38a169; }
-.amount-empty   { color: var(--text-light); }
-
-/* Soldes en fin de ligne */
-.td-solde-coffre { font-family: 'DM Mono', monospace; font-size: .82rem; color: #c05a1a; font-weight: 600; }
-.td-solde-banque { font-family: 'DM Mono', monospace; font-size: .82rem; color: var(--blue); font-weight: 600; }
-
-/* Tag type transaction */
-.tag-entree   { background: #fff0e6; color: #e8843b; }
-.tag-virement { background: var(--blue-pale); color: var(--blue); }
-.tag-sortie   { background: #f0fff4; color: #38a169; }
+/* Mini soldes dans la table */
+.mini-solde {
+  font-family: 'DM Mono', monospace;
+  font-size: .78rem;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+.mini-coffre { color: #c05a1a; }
+.mini-banque { color: var(--blue); }

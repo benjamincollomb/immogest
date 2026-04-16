@@ -431,80 +431,112 @@
          TAB: COMPTABILITÉ
     ====================================================== -->
     <section class="tab-content" id="tab-compta">
+
       <div class="page-header">
         <div>
           <h1>Comptabilité</h1>
-          <p class="subtitle">Coffre & Compte bancaire</p>
+          <p class="subtitle">Coffre liquide & Compte bancaire</p>
         </div>
       </div>
 
-      <!-- Soldes -->
+      <!-- ===== CARTES SOLDE ===== -->
       <div class="compta-soldes">
+
         <div class="solde-card solde-coffre">
-          <div class="solde-icon"><i class="fa-solid fa-box-open"></i></div>
-          <div class="solde-body">
-            <div class="solde-label">Coffre (liquide)</div>
+          <div class="solde-card-bg"></div>
+          <div class="solde-card-inner">
+            <div class="solde-top">
+              <span class="solde-label"><i class="fa-solid fa-box-open"></i> Coffre liquide</span>
+              <span class="solde-chip">Cash</span>
+            </div>
             <div class="solde-amount" id="soldeCoffre">0.00 CHF</div>
-            <div class="solde-hint">Argent des puces de lavage</div>
+            <div class="solde-hint">Recharges puces de lavage</div>
           </div>
         </div>
+
         <div class="solde-card solde-banque">
-          <div class="solde-icon"><i class="fa-solid fa-building-columns"></i></div>
-          <div class="solde-body">
-            <div class="solde-label">Compte bancaire</div>
+          <div class="solde-card-bg"></div>
+          <div class="solde-card-inner">
+            <div class="solde-top">
+              <span class="solde-label"><i class="fa-solid fa-building-columns"></i> Compte bancaire</span>
+              <span class="solde-chip">Banque</span>
+            </div>
             <div class="solde-amount" id="soldeBanque">0.00 CHF</div>
-            <div class="solde-hint">Virements & paiements régie</div>
+            <div class="solde-hint">Paiements factures régie</div>
           </div>
         </div>
+
         <div class="solde-card solde-total">
-          <div class="solde-icon"><i class="fa-solid fa-wallet"></i></div>
-          <div class="solde-body">
-            <div class="solde-label">Total disponible</div>
+          <div class="solde-card-bg"></div>
+          <div class="solde-card-inner">
+            <div class="solde-top">
+              <span class="solde-label"><i class="fa-solid fa-wallet"></i> Total disponible</span>
+              <span class="solde-chip">Total</span>
+            </div>
             <div class="solde-amount" id="soldeTotal">0.00 CHF</div>
             <div class="solde-hint">Coffre + Banque</div>
           </div>
         </div>
+
       </div>
 
-      <!-- 3 boutons d'action -->
+      <!-- ===== 3 BOUTONS D'ACTION ===== -->
       <div class="compta-actions">
+
         <button class="compta-btn compta-btn-entree" id="btnEntree">
-          <i class="fa-solid fa-arrow-down"></i>
-          <span class="compta-btn-label">Entrée coffre</span>
-          <span class="compta-btn-desc">Puce de lavage / dépôt liquide</span>
+          <div class="compta-btn-icon">
+            <i class="fa-solid fa-plus"></i>
+          </div>
+          <div class="compta-btn-text">
+            <span class="compta-btn-label">Entrée coffre</span>
+            <span class="compta-btn-desc">Recharge puce / dépôt liquide</span>
+          </div>
+          <i class="fa-solid fa-chevron-right compta-btn-arrow"></i>
         </button>
+
         <button class="compta-btn compta-btn-virement" id="btnVirement">
-          <i class="fa-solid fa-arrow-right-arrow-left"></i>
-          <span class="compta-btn-label">Coffre → Banque</span>
-          <span class="compta-btn-desc">Déposer le liquide en banque</span>
+          <div class="compta-btn-icon">
+            <i class="fa-solid fa-arrow-right-arrow-left"></i>
+          </div>
+          <div class="compta-btn-text">
+            <span class="compta-btn-label">Coffre → Banque</span>
+            <span class="compta-btn-desc">Déposer le liquide en banque</span>
+          </div>
+          <i class="fa-solid fa-chevron-right compta-btn-arrow"></i>
         </button>
+
         <button class="compta-btn compta-btn-sortie" id="btnSortie">
-          <i class="fa-solid fa-arrow-up"></i>
-          <span class="compta-btn-label">Sortie banque</span>
-          <span class="compta-btn-desc">Payer une facture régie</span>
+          <div class="compta-btn-icon">
+            <i class="fa-solid fa-minus"></i>
+          </div>
+          <div class="compta-btn-text">
+            <span class="compta-btn-label">Sortie banque</span>
+            <span class="compta-btn-desc">Payer une facture régie</span>
+          </div>
+          <i class="fa-solid fa-chevron-right compta-btn-arrow"></i>
         </button>
+
       </div>
 
-      <!-- Historique -->
-      <div class="card" style="margin-top:1.5rem">
-        <div class="card-header" style="justify-content:space-between">
-          <div style="display:flex;align-items:center;gap:.7rem">
+      <!-- ===== HISTORIQUE ===== -->
+      <div class="compta-history-wrap">
+        <div class="compta-history-header">
+          <div class="compta-history-title">
             <i class="fa-solid fa-clock-rotate-left"></i>
-            <h2>Historique des transactions</h2>
+            <span>Historique des transactions</span>
           </div>
-          <div style="display:flex;gap:.6rem;align-items:center">
-            <select id="filterComptaType" style="padding:.4rem .7rem;border:1.5px solid var(--border);border-radius:6px;font-size:.82rem;background:var(--white);color:var(--text);outline:none">
-              <option value="">Toutes</option>
-              <option value="entree">Entrées coffre</option>
-              <option value="virement">Coffre → Banque</option>
-              <option value="sortie">Sorties banque</option>
-            </select>
-          </div>
+          <select id="filterComptaType" class="compta-filter">
+            <option value="">Toutes les transactions</option>
+            <option value="entree">Entrées coffre</option>
+            <option value="virement">Coffre → Banque</option>
+            <option value="sortie">Sorties banque</option>
+          </select>
         </div>
         <div class="compta-history" id="comptaHistory">
           <p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>
         </div>
       </div>
+
     </section>
 
   </div><!-- /main-wrapper -->
