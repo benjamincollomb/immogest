@@ -393,6 +393,16 @@ function formatDate(str){
   catch{ return str; }
 }
 
+function formatDateFull(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("fr-CH", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+  } catch { return iso; }
+}
+
 /* ============================================================
    8. TOAST
    ============================================================ */
