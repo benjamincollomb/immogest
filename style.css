@@ -1692,3 +1692,172 @@ img { display:block; max-width:100%; }
   color: #fff;
   text-decoration: underline;
 }
+
+/* ============================================================
+   COMPTABILITÉ
+   ============================================================ */
+
+/* ---- Cartes de solde ---- */
+.compta-soldes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+@media(max-width: 700px) {
+  .compta-soldes { grid-template-columns: 1fr; }
+}
+
+.solde-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 1.4rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  box-shadow: var(--shadow);
+  border-left: 5px solid transparent;
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.solde-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+.solde-coffre   { border-color: #e8843b; }
+.solde-banque   { border-color: #1e5cbf; }
+.solde-total    { border-color: #38a169; }
+
+.solde-icon {
+  width: 50px; height: 50px;
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+.solde-coffre .solde-icon { background: #fff0e6; color: #e8843b; }
+.solde-banque .solde-icon { background: var(--blue-pale); color: var(--blue); }
+.solde-total  .solde-icon { background: #f0fff4; color: #38a169; }
+
+.solde-label  { font-size: .78rem; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: .05em; }
+.solde-amount {
+  font-size: 1.65rem;
+  font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  color: var(--navy);
+  margin: .2rem 0 .15rem;
+  line-height: 1;
+}
+.solde-coffre .solde-amount { color: #c05a1a; }
+.solde-banque .solde-amount { color: var(--blue); }
+.solde-total  .solde-amount { color: #276749; }
+.solde-hint   { font-size: .75rem; color: var(--text-light); }
+
+/* ---- Boutons d'action ---- */
+.compta-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+@media(max-width: 700px) {
+  .compta-actions { grid-template-columns: 1fr; }
+}
+
+.compta-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: 1.4rem 1rem;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  transition: all var(--transition);
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.compta-btn > i {
+  font-size: 1.6rem;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform var(--transition);
+}
+.compta-btn:hover > i { transform: scale(1.15); }
+.compta-btn-label {
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+.compta-btn-desc {
+  font-size: .78rem;
+  color: var(--text-light);
+}
+
+.compta-btn-entree  { background: #fff8f0; border-color: #f0c090; }
+.compta-btn-entree:hover  { background: #fff0e0; border-color: #e8843b; box-shadow: 0 4px 16px rgba(232,132,59,.2); }
+.compta-btn-entree > i    { background: #fff0e6; color: #e8843b; }
+
+.compta-btn-virement { background: var(--blue-pale); border-color: #a0bcee; }
+.compta-btn-virement:hover { background: #d8e8fa; border-color: var(--blue); box-shadow: 0 4px 16px rgba(30,92,191,.2); }
+.compta-btn-virement > i   { background: #d8e8fa; color: var(--blue); }
+
+.compta-btn-sortie  { background: #f0fff4; border-color: #9ae6b4; }
+.compta-btn-sortie:hover  { background: #e0faea; border-color: #38a169; box-shadow: 0 4px 16px rgba(56,161,105,.2); }
+.compta-btn-sortie > i    { background: #e0faea; color: #38a169; }
+
+/* ---- Historique ---- */
+.compta-history {
+  overflow-x: auto;
+}
+
+.compta-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+.compta-table thead th {
+  background: var(--bg);
+  color: var(--text-light);
+  font-weight: 700;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: .8rem 1.1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.compta-table tbody tr {
+  border-bottom: 1px solid var(--slate-light);
+  transition: background var(--transition);
+}
+.compta-table tbody tr:last-child { border-bottom: none; }
+.compta-table tbody tr:hover { background: var(--bg); }
+.compta-table td {
+  padding: .85rem 1.1rem;
+  vertical-align: middle;
+}
+.compta-table td.td-date {
+  font-family: 'DM Mono', monospace;
+  font-size: .8rem;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+.compta-table td.td-desc { color: var(--text); font-weight: 500; }
+.compta-table td.td-note { color: var(--text-light); font-size: .82rem; font-style: italic; }
+
+/* Montants colorés */
+.amount-entree  { font-family: 'DM Mono', monospace; font-weight: 700; color: #e8843b; }
+.amount-virement{ font-family: 'DM Mono', monospace; font-weight: 700; color: var(--blue); }
+.amount-sortie  { font-family: 'DM Mono', monospace; font-weight: 700; color: #38a169; }
+.amount-empty   { color: var(--text-light); }
+
+/* Soldes en fin de ligne */
+.td-solde-coffre { font-family: 'DM Mono', monospace; font-size: .82rem; color: #c05a1a; font-weight: 600; }
+.td-solde-banque { font-family: 'DM Mono', monospace; font-size: .82rem; color: var(--blue); font-weight: 600; }
+
+/* Tag type transaction */
+.tag-entree   { background: #fff0e6; color: #e8843b; }
+.tag-virement { background: var(--blue-pale); color: var(--blue); }
+.tag-sortie   { background: #f0fff4; color: #38a169; }

@@ -522,6 +522,7 @@ function switchTab(tabId){
   if(tabId==="tasks")     renderTasks();
   if(tabId==="orders")    renderOrders();
   if(tabId==="spaces")    renderSpaces();
+  if(tabId==="compta")    renderCompta();
 }
 
 /* -------- Sidebar mobile -------- */
@@ -1435,5 +1436,250 @@ const btnExportAll = document.getElementById("btnExportAllPDF");
 if (btnExportAll) {
   btnExportAll.addEventListener("click", exportAllOrdersPDF);
 }
+
+/* ============================================================
+   22. COMPTABILITÉ — Coffre & Compte bancaire
+   Collection Firestore : "transactions"
+   Chaque document : { type, montant, description, date, soldeCoffre, soldeBanque }
+   Types : "entree" | "virement" | "sortie"
+   ============================================================ */
+
+let transactions = [];
+let unsubCompta = null;
+
+/* ---- Démarrer l'écouteur temps réel comptabilité ---- */
+function startComptaListener() {
+  if (unsubCompta) unsubCompta();
+  unsubCompta = col("transactions")
+    .orderBy("date", "desc")
+    .onSnapshot(snap => {
+      transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderCompta();
+    }, err => console.error("compta listener:", err));
+}
+
+/* ---- Calculer les soldes actuels ---- */
+function getSoldes() {
+  // Le solde le plus récent est dans le premier doc (trié desc)
+  if (transactions.length === 0) return { coffre: 0, banque: 0 };
+  const last = transactions[0]; // dernier en date
+  return {
+    coffre: last.soldeCoffre || 0,
+    banque: last.soldeBanque || 0
+  };
+}
+
+/* ---- Formater un montant en CHF ---- */
+function chf(n) {
+  return parseFloat(n || 0).toFixed(2) + " CHF";
+}
+
+/* ---- Rendre l'onglet comptabilité ---- */
+function renderCompta() {
+  const { coffre, banque } = getSoldes();
+  document.getElementById("soldeCoffre").textContent = chf(coffre);
+  document.getElementById("soldeBanque").textContent = chf(banque);
+  document.getElementById("soldeTotal").textContent  = chf(coffre + banque);
+
+  const filterType = document.getElementById("filterComptaType").value;
+  let list = [...transactions];
+  if (filterType) list = list.filter(t => t.type === filterType);
+
+  const container = document.getElementById("comptaHistory");
+  if (!list.length) {
+    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>`;
+    return;
+  }
+
+  const TYPE_LABELS = {
+    entree:    '<span class="tag tag-entree">Entrée coffre</span>',
+    virement:  '<span class="tag tag-virement">Coffre → Banque</span>',
+    sortie:    '<span class="tag tag-sortie">Sortie banque</span>',
+  };
+
+  container.innerHTML = `
+    <table class="compta-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th style="text-align:right">Entrée coffre</th>
+          <th style="text-align:right">Retrait coffre</th>
+          <th style="text-align:right">Retrait banque</th>
+          <th style="text-align:right">Solde coffre</th>
+          <th style="text-align:right">Solde banque</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${list.map(t => {
+          const isEntree   = t.type === "entree";
+          const isVirement = t.type === "virement";
+          const isSortie   = t.type === "sortie";
+          return `
+          <tr>
+            <td class="td-date">${formatDateFull(t.date)}</td>
+            <td>${TYPE_LABELS[t.type] || t.type}</td>
+            <td class="td-desc">${escHtml(t.description||"")}</td>
+            <td style="text-align:right">${isEntree   ? `<span class="amount-entree">+${chf(t.montant)}</span>`   : '<span class="amount-empty">—</span>'}</td>
+            <td style="text-align:right">${isVirement ? `<span class="amount-virement">-${chf(t.montant)}</span>` : '<span class="amount-empty">—</span>'}</td>
+            <td style="text-align:right">${isSortie   ? `<span class="amount-sortie">-${chf(t.montant)}</span>`   : '<span class="amount-empty">—</span>'}</td>
+            <td style="text-align:right"><span class="td-solde-coffre">${chf(t.soldeCoffre)}</span></td>
+            <td style="text-align:right"><span class="td-solde-banque">${chf(t.soldeBanque)}</span></td>
+            <td>
+              <button class="btn-icon delete" data-compta-id="${t.id}" title="Supprimer">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    </table>`;
+
+  // Supprimer une transaction
+  container.querySelectorAll("[data-compta-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Supprimer cette transaction ?\nAttention : les soldes ne seront pas recalculés automatiquement.")) return;
+      await fsDelete("transactions", btn.dataset.comptaId);
+      showToast("Transaction supprimée.", "info");
+    });
+  });
+}
+
+function formatDateFull(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("fr-CH", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
+    });
+  } catch { return iso; }
+}
+
+/* ---- Formulaire de saisie d'une transaction ---- */
+function comptaFormHTML(type) {
+  const configs = {
+    entree:   { icon: "fa-arrow-down",             color: "#e8843b", label: "Entrée coffre",   desc: "Recharge puce de lavage / dépôt liquide" },
+    virement: { icon: "fa-arrow-right-arrow-left", color: "#1e5cbf", label: "Coffre → Banque", desc: "Déposer le liquide en banque" },
+    sortie:   { icon: "fa-arrow-up",               color: "#38a169", label: "Sortie banque",   desc: "Payer une facture régie" },
+  };
+  const c = configs[type];
+  const { coffre, banque } = getSoldes();
+
+  return `
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:1.2rem">
+      <i class="fa-solid ${c.icon}" style="color:${c.color};font-size:1.2rem"></i>
+      <div>
+        <div style="font-weight:700;color:var(--navy)">${c.label}</div>
+        <div style="font-size:.8rem;color:var(--text-light)">${c.desc}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
+      <div style="flex:1;min-width:120px;background:var(--bg);border-radius:var(--radius-sm);padding:.65rem 1rem;text-align:center">
+        <div style="font-size:.7rem;color:var(--text-light);font-weight:700;text-transform:uppercase">Coffre actuel</div>
+        <div style="font-family:'DM Mono',monospace;font-weight:700;color:#c05a1a;font-size:1.1rem;margin-top:.2rem">${chf(coffre)}</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:var(--bg);border-radius:var(--radius-sm);padding:.65rem 1rem;text-align:center">
+        <div style="font-size:.7rem;color:var(--text-light);font-weight:700;text-transform:uppercase">Banque actuelle</div>
+        <div style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blue);font-size:1.1rem;margin-top:.2rem">${chf(banque)}</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Montant (CHF) *</label>
+      <input id="fComptaMontant" type="number" min="0.01" step="0.05" placeholder="Ex : 50.00" style="font-size:1.1rem;font-weight:600"/>
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input id="fComptaDesc" type="text" placeholder="${
+        type === "entree"   ? "Ex : Recharge puce Apt 3A" :
+        type === "virement" ? "Ex : Dépôt coffre → banque" :
+        "Ex : Facture régie mars 2025"
+      }"/>
+    </div>
+    <div class="form-group">
+      <label>Date & heure</label>
+      <input id="fComptaDate" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/>
+    </div>`;
+}
+
+/* ---- Enregistrer une transaction ---- */
+async function saveTransaction(type) {
+  const montantRaw = parseFloat(document.getElementById("fComptaMontant").value);
+  if (!montantRaw || montantRaw <= 0) {
+    showToast("Le montant doit être supérieur à 0.", "error"); return false;
+  }
+  const montant     = Math.round(montantRaw * 100) / 100;
+  const description = document.getElementById("fComptaDesc").value.trim();
+  const dateVal     = document.getElementById("fComptaDate").value;
+  const date        = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+
+  const { coffre: coffreAct, banque: banqueAct } = getSoldes();
+
+  // Calculer les nouveaux soldes
+  let newCoffre = coffreAct;
+  let newBanque = banqueAct;
+
+  if (type === "entree") {
+    newCoffre = Math.round((coffreAct + montant) * 100) / 100;
+  } else if (type === "virement") {
+    if (montant > coffreAct) {
+      showToast(`Solde coffre insuffisant (${chf(coffreAct)}).`, "error"); return false;
+    }
+    newCoffre = Math.round((coffreAct - montant) * 100) / 100;
+    newBanque = Math.round((banqueAct + montant) * 100) / 100;
+  } else if (type === "sortie") {
+    if (montant > banqueAct) {
+      showToast(`Solde bancaire insuffisant (${chf(banqueAct)}).`, "error"); return false;
+    }
+    newBanque = Math.round((banqueAct - montant) * 100) / 100;
+  }
+
+  const newDoc = {
+    id:           uid(),
+    type,
+    montant,
+    description,
+    date,
+    soldeCoffre:  newCoffre,
+    soldeBanque:  newBanque,
+  };
+
+  await fsAdd("transactions", newDoc);
+  closeModal();
+  showToast("Transaction enregistrée ✓", "success");
+  return true;
+}
+
+/* ---- Boutons d'action ---- */
+document.getElementById("btnEntree").addEventListener("click", () => {
+  openModal("Entrée coffre", comptaFormHTML("entree"), async () => {
+    await saveTransaction("entree");
+  });
+});
+document.getElementById("btnVirement").addEventListener("click", () => {
+  openModal("Coffre → Banque", comptaFormHTML("virement"), async () => {
+    await saveTransaction("virement");
+  });
+});
+document.getElementById("btnSortie").addEventListener("click", () => {
+  openModal("Sortie banque", comptaFormHTML("sortie"), async () => {
+    await saveTransaction("sortie");
+  });
+});
+
+/* ---- Filtre ---- */
+document.getElementById("filterComptaType").addEventListener("change", renderCompta);
+
+/* ---- Ajouter startComptaListener dans initApp ---- */
+// (Patché dans initApp ci-dessous via override)
+const _origStartListeners = startListeners;
+function startListeners() {
+  _origStartListeners();
+  startComptaListener();
+}
+
+/* ---- Ajouter "compta" dans TAB_TITLES et switchTab ---- */
+TAB_TITLES["compta"] = "Comptabilité";
 
 })();
