@@ -3,23 +3,21 @@
 
 /* ============================================================
    IMMOGEST — script.js
-   Firebase Auth + Firestore + Storage
+   Firebase Auth + Firestore (photos base64, pas de Storage)
    ============================================================ */
 
 /* ============================================================
-   1. FIREBASE — Initialisation
+   1. FIREBASE — Initialisation (sans Storage = 100% gratuit)
    ============================================================ */
 let db      = null;
 let auth    = null;
-let storage = null;
-let currentUser = null; // utilisateur Firebase connecté
+let currentUser = null;
 
 function initFirebase() {
   try {
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    db      = firebase.firestore();
-    auth    = firebase.auth();
-    storage = firebase.storage();
+    db   = firebase.firestore();
+    auth = firebase.auth();
     console.log("✅ Firebase connecté");
     return true;
   } catch(e) {
@@ -233,16 +231,17 @@ registerForm.addEventListener("submit", async e => {
     // Mettre à jour le displayName
     await user.updateProfile({ displayName: name });
 
-    // Uploader la photo si choisie
+    // Sauvegarder la photo en base64 dans Firestore (pas de Storage)
+    let photoB64 = null;
     if (registerAvatarFile) {
-      const url = await uploadProfilePhoto(user.uid, registerAvatarFile);
-      await user.updateProfile({ photoURL: url });
+      photoB64 = await resizeImageToBase64(registerAvatarFile);
+      await user.updateProfile({ photoURL: photoB64 });
     }
 
     // Créer le profil dans Firestore
     await db.doc(`users/${user.uid}`).set({
-      name,
-      email,
+      name, email,
+      photoBase64: photoB64 || null,
       createdAt: new Date().toISOString()
     });
 
@@ -270,38 +269,90 @@ document.getElementById("navLogout").addEventListener("click", async e => {
 });
 
 /* ============================================================
-   6. PHOTO DE PROFIL — Firebase Storage
+   6. PHOTO DE PROFIL — stockée en base64 dans Firestore
+   Zéro Storage Firebase = 100% gratuit
    ============================================================ */
-async function uploadProfilePhoto(uid, file) {
-  const ext  = file.name.split(".").pop();
-  const ref  = storage.ref(`profiles/${uid}/avatar.${ext}`);
-  const snap = await ref.put(file);
-  return await snap.ref.getDownloadURL();
+
+/**
+ * Redimensionne une image et la retourne en base64 (JPEG 80×80px, qualité 0.85).
+ * Taille résultante : ~3-8 Ko selon l'image — bien dans les limites Firestore.
+ */
+function resizeImageToBase64(file, size = 80) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width  = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        // Recadrage centré (crop carré)
+        const dim = Math.min(img.width, img.height);
+        const sx  = (img.width  - dim) / 2;
+        const sy  = (img.height - dim) / 2;
+        ctx.drawImage(img, sx, sy, dim, dim, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Sauvegarde la photo (base64) dans Firestore + met à jour Firebase Auth photoURL.
+ */
+async function saveProfilePhoto(uid, file) {
+  const b64 = await resizeImageToBase64(file);
+  // Stocker dans Firestore
+  await db.doc(`users/${uid}`).set({ photoBase64: b64 }, { merge: true });
+  // Stocker aussi dans Firebase Auth (URL data: acceptée par updateProfile)
+  await currentUser.updateProfile({ photoURL: b64 });
+  return b64;
+}
+
+/**
+ * Charge la photo depuis Firestore si non disponible dans Auth.
+ */
+async function loadProfilePhoto(uid) {
+  try {
+    const snap = await db.doc(`users/${uid}`).get();
+    if (snap.exists && snap.data().photoBase64) return snap.data().photoBase64;
+  } catch(e) { console.warn("loadProfilePhoto:", e); }
+  return null;
 }
 
 /** Met à jour l'avatar dans la sidebar et l'admin */
-function updateAvatarUI(photoURL, name) {
+async function updateAvatarUI(photoURL, name) {
   // Sidebar
-  const icon = document.getElementById("sidebarAvatarIcon");
-  const img  = document.getElementById("sidebarAvatarImg");
+  const icon   = document.getElementById("sidebarAvatarIcon");
+  const img    = document.getElementById("sidebarAvatarImg");
   const nameEl = document.getElementById("sidebarUserName");
   if (nameEl) nameEl.textContent = name || "Concierge";
 
-  if (photoURL) {
-    icon.style.display = "none";
-    img.src = photoURL;
-    img.style.display = "block";
+  // Priorité : Firestore > Auth photoURL
+  let finalPhoto = photoURL;
+  if (!finalPhoto && currentUser) {
+    finalPhoto = await loadProfilePhoto(currentUser.uid);
+  }
+
+  if (finalPhoto) {
+    if (icon) icon.style.display = "none";
+    if (img)  { img.src = finalPhoto; img.style.display = "block"; }
   } else {
-    icon.style.display = "";
-    img.style.display = "none";
+    if (icon) icon.style.display = "";
+    if (img)  img.style.display = "none";
   }
 
   // Admin panel
   const paIcon = document.getElementById("profileAvatarIcon");
   const paImg  = document.getElementById("profileAvatarImg");
   if (paIcon && paImg) {
-    if (photoURL) { paIcon.style.display="none"; paImg.src=photoURL; paImg.style.display="block"; }
-    else          { paIcon.style.display=""; paImg.style.display="none"; }
+    if (finalPhoto) { paIcon.style.display="none"; paImg.src=finalPhoto; paImg.style.display="block"; }
+    else            { paIcon.style.display=""; paImg.style.display="none"; }
   }
   const pName  = document.getElementById("profileName");
   const pEmail = document.getElementById("profileEmail");
@@ -315,15 +366,12 @@ function updateAvatarUI(photoURL, name) {
 async function startAuthListener() {
   auth.onAuthStateChanged(async user => {
     if (user) {
-      // Utilisateur connecté
       currentUser = user;
       hideLogin();
-      updateAvatarUI(user.photoURL, user.displayName);
+      await updateAvatarUI(user.photoURL, user.displayName);
       await initApp();
     } else {
-      // Déconnecté
       currentUser = null;
-      // Détacher les listeners Firestore
       if(unsubTasks)  unsubTasks();
       if(unsubOrders) unsubOrders();
       if(unsubSpaces) unsubSpaces();
@@ -337,24 +385,22 @@ async function startAuthListener() {
    8. PROFIL — édition depuis le panneau admin
    ============================================================ */
 
-// Clic sur l'avatar de la sidebar → ouvre l'admin sur la section profil
 document.getElementById("userInfoBar").addEventListener("click", () => {
   openAdmin();
 });
 
-// Changer la photo depuis l'admin
+// Changer la photo depuis l'admin — redimensionnée et stockée dans Firestore
 document.getElementById("profilePhotoInput").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file || !currentUser) return;
 
-  showToast("Upload en cours…", "info");
+  showToast("Traitement de la photo…", "info");
   try {
-    const url = await uploadProfilePhoto(currentUser.uid, file);
-    await currentUser.updateProfile({ photoURL: url });
-    updateAvatarUI(url, currentUser.displayName);
+    const b64 = await saveProfilePhoto(currentUser.uid, file);
+    await updateAvatarUI(b64, currentUser.displayName);
     showToast("Photo de profil mise à jour !", "success");
   } catch(err) {
-    showToast("Erreur lors de l'upload : " + err.message, "error");
+    showToast("Erreur : " + err.message, "error");
   }
 });
 
@@ -367,7 +413,7 @@ document.getElementById("btnSaveProfile").addEventListener("click", async () => 
   try {
     await currentUser.updateProfile({ displayName: name });
     await db.doc(`users/${currentUser.uid}`).set({ name }, { merge: true });
-    updateAvatarUI(currentUser.photoURL, name);
+    await updateAvatarUI(currentUser.photoURL, name);
     showToast("Profil mis à jour !", "success");
   } catch(err) {
     showToast("Erreur : " + err.message, "error");
@@ -1695,6 +1741,22 @@ document.getElementById("filterComptaType").addEventListener("change", renderCom
 /* ============================================================
    23. COMPTABILITÉ — renderAllTransactions (avec "En attente")
    ============================================================ */
+/* ---- État de la sélection multiple ---- */
+let selectedTxIds = new Set();
+
+function updateSelectionBar() {
+  const bar = document.getElementById("selectionBar");
+  if (!bar) return;
+  const n = selectedTxIds.size;
+  if (n === 0) {
+    bar.classList.add("hidden");
+  } else {
+    bar.classList.remove("hidden");
+    const label = bar.querySelector(".sel-count");
+    if (label) label.textContent = `${n} transaction${n > 1 ? "s" : ""} sélectionnée${n > 1 ? "s" : ""}`;
+  }
+}
+
 function renderAllTransactions() {
   const filterType = document.getElementById("filterComptaType").value;
   let list = [...transactions];
@@ -1708,16 +1770,18 @@ function renderAllTransactions() {
   const container = document.getElementById("comptaHistory");
   if (!list.length) {
     container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>`;
+    selectedTxIds.clear();
+    updateSelectionBar();
     return;
   }
 
-  // Compter les entrées en attente pour le bandeau
+  // Bandeau entrées en attente
   const pendingCount = transactions.filter(t => t.status === "pending").length;
   const pendingBanner = pendingCount && filterType !== "pending" ? `
     <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem 1.25rem;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:.83rem;cursor:pointer"
          onclick="document.getElementById('filterComptaType').value='pending';renderCompta()">
       <i class="fa-solid fa-clock" style="color:#d97706"></i>
-      <span style="color:#92400e;font-weight:600">${pendingCount} entrée${pendingCount>1?"s":""} en attente de paiement</span>
+      <span style="color:#92400e;font-weight:600">${pendingCount} entrée${pendingCount>1?"s":""} en attente</span>
       <span style="color:#a16207;margin-left:auto">Voir →</span>
     </div>` : "";
 
@@ -1729,11 +1793,20 @@ function renderAllTransactions() {
     sortie:   () => '<span class="tag tag-sortie">Sortie banque</span>',
   };
 
+  // Tout sélectionner/désélectionner au clic sur le header
+  const archivable = list.filter(t => t.status !== "pending");
+  const allSelected = archivable.length > 0 && archivable.every(t => selectedTxIds.has(t.id));
+
   container.innerHTML = pendingBanner + `
     <div style="overflow-x:auto">
     <table class="compta-table">
       <thead>
         <tr>
+          <th style="width:36px;text-align:center">
+            <input type="checkbox" id="selectAllTx" title="Tout sélectionner"
+              ${allSelected ? "checked" : ""}
+              style="cursor:pointer;accent-color:var(--blue);width:15px;height:15px"/>
+          </th>
           <th>Date & heure</th>
           <th>Type</th>
           <th>Description</th>
@@ -1751,10 +1824,16 @@ function renderAllTransactions() {
           const isV = t.type === "virement";
           const isS = t.type === "sortie";
           const isPend = t.status === "pending";
-          const rowClass = isPend ? "row-pending" : "";
+          const isSelected = selectedTxIds.has(t.id);
+          const rowClass = [isPend ? "row-pending" : "", isSelected ? "row-selected" : ""].filter(Boolean).join(" ");
           const labelFn = TYPE_LABELS[t.type] || (() => t.type);
           return `
-          <tr class="${rowClass}">
+          <tr class="${rowClass}" data-tx-row="${t.id}">
+            <td style="text-align:center">
+              ${!isPend ? `<input type="checkbox" class="tx-checkbox" data-tx-id="${t.id}"
+                ${isSelected ? "checked" : ""}
+                style="cursor:pointer;accent-color:var(--blue);width:15px;height:15px"/>` : ""}
+            </td>
             <td class="td-date">${formatDateFull(t.date)}</td>
             <td>${labelFn(t.status)}</td>
             <td class="td-desc">${escHtml(t.description || "—")}</td>
@@ -1775,10 +1854,39 @@ function renderAllTransactions() {
     </table>
     </div>`;
 
+  // Checkbox "tout sélectionner"
+  const selectAll = container.querySelector("#selectAllTx");
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      if (selectAll.checked) {
+        archivable.forEach(t => selectedTxIds.add(t.id));
+      } else {
+        archivable.forEach(t => selectedTxIds.delete(t.id));
+      }
+      updateSelectionBar();
+      renderAllTransactions(); // re-render pour cocher/décocher
+    });
+  }
+
+  // Checkboxes individuelles
+  container.querySelectorAll(".tx-checkbox").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) selectedTxIds.add(cb.dataset.txId);
+      else            selectedTxIds.delete(cb.dataset.txId);
+      updateSelectionBar();
+      // Mettre à jour le fond de la ligne sans re-render complet
+      const row = container.querySelector(`[data-tx-row="${cb.dataset.txId}"]`);
+      if (row) row.classList.toggle("row-selected", cb.checked);
+      // Mettre à jour "tout sélectionner"
+      const newAll = archivable.every(t => selectedTxIds.has(t.id));
+      if (selectAll) selectAll.checked = newAll;
+    });
+  });
+
   // Confirmer paiement en attente
   container.querySelectorAll("[data-confirm-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!confirm(`Confirmer la réception de ce paiement ?`)) return;
+      if (!confirm("Confirmer la réception de ce paiement ?")) return;
       await confirmPendingEntry(btn.dataset.confirmId);
     });
   });
@@ -1787,10 +1895,14 @@ function renderAllTransactions() {
   container.querySelectorAll("[data-compta-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("Supprimer cette transaction ?")) return;
+      selectedTxIds.delete(btn.dataset.comptaId);
+      updateSelectionBar();
       await fsDelete("transactions", btn.dataset.comptaId);
       showToast("Transaction supprimée.", "info");
     });
   });
+
+  updateSelectionBar();
 }
 
 /* ============================================================
@@ -2028,6 +2140,62 @@ document.getElementById("btnCreateArchive").addEventListener("click", () => {
     closeModal();
     showToast(`Dossier "${name}" créé !`, "success");
   });
+});
+
+/* ---- Bouton "Archiver la sélection" ---- */
+document.getElementById("btnArchiveSelected").addEventListener("click", () => {
+  if (selectedTxIds.size === 0) return;
+  if (!archives.length) {
+    showToast("Crée d'abord un dossier dans l'onglet Archives.", "info");
+    return;
+  }
+
+  const n = selectedTxIds.size;
+  const archiveOptions = archives.map(a =>
+    `<option value="${a.id}">${escHtml(a.name)}</option>`
+  ).join("");
+
+  openModal(
+    `Archiver ${n} transaction${n > 1 ? "s" : ""}`,
+    `<div class="form-group">
+       <label>Choisir le dossier de destination *</label>
+       <select id="fBulkArchive" style="font-size:.95rem">
+         <option value="">— Sélectionner un dossier —</option>
+         ${archiveOptions}
+       </select>
+     </div>
+     <p style="font-size:.82rem;color:var(--text-light);margin-top:.5rem">
+       <i class="fa-solid fa-circle-info" style="color:var(--blue)"></i>
+       ${n} transaction${n > 1 ? "s" : ""} seront ajoutée${n > 1 ? "s" : ""} au dossier sélectionné.
+     </p>`,
+    async () => {
+      const archiveId = document.getElementById("fBulkArchive").value;
+      if (!archiveId) { showToast("Sélectionne un dossier.", "error"); return; }
+
+      const ids = [...selectedTxIds];
+      showToast("Archivage en cours…", "info");
+
+      // Mise à jour en parallèle
+      await Promise.all(ids.map(id => {
+        const t = transactions.find(t => t.id === id);
+        if (t) return fsUpdate("transactions", id, { ...t, archiveId });
+        return Promise.resolve();
+      }));
+
+      const archName = archives.find(a => a.id === archiveId)?.name || "le dossier";
+      selectedTxIds.clear();
+      updateSelectionBar();
+      closeModal();
+      showToast(`${ids.length} transaction${ids.length > 1 ? "s" : ""} archivée${ids.length > 1 ? "s" : ""} dans "${archName}" ✓`, "success");
+    }
+  );
+});
+
+/* ---- Bouton annuler la sélection ---- */
+document.getElementById("btnClearSelection").addEventListener("click", () => {
+  selectedTxIds.clear();
+  updateSelectionBar();
+  renderAllTransactions();
 });
 
 TAB_TITLES["compta"] = "Comptabilité";

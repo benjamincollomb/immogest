@@ -554,6 +554,22 @@
         </div>
       </div>
 
+      <!-- Barre flottante de sélection multiple -->
+      <div class="selection-bar hidden" id="selectionBar">
+        <div class="sel-left">
+          <i class="fa-solid fa-check-square" style="color:var(--blue-light)"></i>
+          <span class="sel-count">0 sélectionnée</span>
+        </div>
+        <div class="sel-actions">
+          <button class="sel-btn sel-btn-archive" id="btnArchiveSelected">
+            <i class="fa-solid fa-folder-plus"></i> Archiver dans un dossier
+          </button>
+          <button class="sel-btn sel-btn-cancel" id="btnClearSelection">
+            <i class="fa-solid fa-xmark"></i> Annuler
+          </button>
+        </div>
+      </div>
+
     </section>
 
   </div><!-- /main-wrapper -->
@@ -579,7 +595,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+  <!-- Storage supprimé — photos stockées en base64 dans Firestore (gratuit) -->
 
   <!-- ⚠️ TON FICHIER DE CONFIGURATION FIREBASE -->
   <script src="firebase-config.js"></script>

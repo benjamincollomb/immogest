@@ -2155,3 +2155,63 @@ img { display:block; max-width:100%; }
 }
 .archive-assign-btn:hover { background: #fde68a; }
 .archive-assign-btn.assigned { background: var(--blue-pale); color: var(--blue); border-color: #bdd3f5; }
+
+/* ============================================================
+   SÉLECTION MULTIPLE — Barre flottante
+   ============================================================ */
+.row-selected td { background: var(--blue-pale) !important; }
+.row-selected { outline: 1px solid var(--blue); }
+
+.selection-bar {
+  position: sticky;
+  bottom: 1.25rem;
+  left: 0; right: 0;
+  margin: 1rem 0 0;
+  background: var(--navy);
+  color: var(--white);
+  border-radius: var(--radius);
+  padding: .85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: 0 6px 28px rgba(26,38,64,.35);
+  z-index: 50;
+  animation: slideUp .22s cubic-bezier(.4,0,.2,1);
+  flex-wrap: wrap;
+}
+.sel-left {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-size: .92rem;
+  font-weight: 600;
+}
+.sel-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
+
+.sel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: all var(--transition);
+  font-family: 'DM Sans', sans-serif;
+}
+.sel-btn-archive {
+  background: var(--orange);
+  color: var(--white);
+  border-color: var(--orange);
+}
+.sel-btn-archive:hover { background: var(--orange-light); }
+
+.sel-btn-cancel {
+  background: rgba(255,255,255,.1);
+  color: rgba(255,255,255,.8);
+  border-color: rgba(255,255,255,.2);
+}
+.sel-btn-cancel:hover { background: rgba(255,255,255,.2); color: var(--white); }
