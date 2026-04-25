@@ -742,7 +742,7 @@ function renderDashboard(){
         <div class="task-mini-dot ${t.priority}"></div>
         <div>
           <div class="task-mini-title">${escHtml(t.title)}</div>
-          <div class="task-mini-meta">${escHtml(t.building)} · ${taskStatusTag(t.status)}</div>
+          <div class="task-mini-meta">${t.building ? escHtml(t.building) : "Général"} · ${taskStatusTag(t.status)}</div>
         </div>
       </div>`).join("");
   }
@@ -792,7 +792,7 @@ function renderTasks(){
         <div class="task-title">${escHtml(t.title)}</div>
         <div class="task-meta">
           ${taskStatusTag(t.status)}${priorityTag(t.priority)}
-          <span class="tag tag-building"><i class="fa-solid fa-building"></i> ${escHtml(t.building)}</span>
+          ${t.building ? `<span class="tag tag-building"><i class="fa-solid fa-building"></i> ${escHtml(t.building)}</span>` : `<span class="tag tag-building" style="color:var(--text-light)"><i class="fa-solid fa-building"></i> Général</span>`}
           ${t.description?`<span class="tag tag-building" style="background:transparent;border:none;color:var(--text-light);font-weight:400">${escHtml(t.description)}</span>`:""}
         </div>
       </div>
@@ -822,8 +822,11 @@ function taskFormHTML(t={}){
       <input id="fTitle" type="text" placeholder="Ex : Nettoyer hall d'entrée" value="${escHtml(t.title||"")}"/>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Immeuble</label>
-        <select id="fBuilding">${buildingOptions(t.building||BUILDINGS[0])}</select>
+      <div class="form-group"><label>Immeuble <span style="color:var(--text-light);font-weight:400">(optionnel)</span></label>
+        <select id="fBuilding">
+          <option value="" ${!t.building?"selected":""}>— Général / Aucun —</option>
+          ${buildingOptions(t.building||"")}
+        </select>
       </div>
       <div class="form-group"><label>Priorité</label>
         <select id="fPriority">
