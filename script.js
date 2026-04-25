@@ -59,26 +59,56 @@ let tasks=[], orders=[], spaces=[], apts=[];
 let unsubTasks=null, unsubOrders=null, unsubSpaces=null, unsubApts=null;
 
 function showFirestorePermissionWarning() {
-  // Afficher un bandeau d'avertissement si les règles Firestore sont expirées
   if (document.getElementById("firestoreWarning")) return;
   const banner = document.createElement("div");
   banner.id = "firestoreWarning";
-  banner.style.cssText = `
-    position:fixed;top:0;left:0;right:0;z-index:9999;
-    background:#dc2626;color:#fff;padding:.75rem 1.5rem;
-    display:flex;align-items:center;gap:1rem;font-size:.88rem;font-weight:600;
-    box-shadow:0 2px 8px rgba(0,0,0,.3);
-  `;
   banner.innerHTML = `
-    <i class="fa-solid fa-triangle-exclamation" style="font-size:1.1rem;flex-shrink:0"></i>
-    <span>⚠️ Règles Firestore expirées — Va sur 
-      <a href="https://console.firebase.google.com/project/immogest-e11ff/firestore/rules" 
-         target="_blank" style="color:#fde68a;text-decoration:underline">Firebase Console → Firestore → Règles</a>
-      et remets le mode test (30 jours) ou copie les règles indiquées dans le README.
-    </span>
-    <button onclick="this.parentElement.remove()" style="margin-left:auto;background:rgba(255,255,255,.2);border:none;color:#fff;padding:.3rem .7rem;border-radius:4px;cursor:pointer;font-size:.85rem">✕</button>
-  `;
-  document.body.prepend(banner);
+    <div style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:1rem">
+      <div style="background:#fff;border-radius:14px;padding:2rem;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
+          <div style="width:44px;height:44px;background:#fef2f2;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i class="fa-solid fa-triangle-exclamation" style="color:#dc2626;font-size:1.2rem"></i>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:1rem;color:#1a2640">Les données ne se sauvegardent plus !</div>
+            <div style="font-size:.82rem;color:#6b7a94;margin-top:.1rem">Les règles Firebase (30 jours) ont expiré</div>
+          </div>
+        </div>
+
+        <p style="font-size:.88rem;color:#4a5568;margin-bottom:1.25rem;line-height:1.6">
+          Tout ce que tu ajoutes <strong>n'est plus sauvegardé</strong> et sera perdu à la déconnexion.
+          Il faut renouveler les règles Firestore en 2 clics :
+        </p>
+
+        <div style="background:#f4f6fb;border-radius:8px;padding:1rem;margin-bottom:1.25rem;font-size:.83rem;line-height:1.7">
+          <strong>1.</strong> Clique sur le bouton ci-dessous<br>
+          <strong>2.</strong> Dans l'éditeur, remplace tout par :<br>
+          <code style="display:block;background:#1a2640;color:#a0cfff;padding:.6rem .8rem;border-radius:6px;margin:.4rem 0;font-size:.78rem;line-height:1.5">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}</code>
+          <strong>3.</strong> Clique <strong>"Publier"</strong> — c'est tout ✓
+        </div>
+
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+          <a href="https://console.firebase.google.com/project/immogest-e11ff/firestore/rules"
+             target="_blank"
+             style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;background:#e86a1a;color:#fff;padding:.65rem 1rem;border-radius:8px;font-weight:700;font-size:.88rem;text-decoration:none;min-width:200px">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            Ouvrir Firebase Firestore
+          </a>
+          <button onclick="document.getElementById('firestoreWarning').remove()"
+                  style="padding:.65rem 1rem;background:#f4f6fb;border:1.5px solid #d1d8e8;border-radius:8px;font-weight:600;font-size:.85rem;cursor:pointer;color:#4a5568">
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(banner);
 }
 
 function startListeners() {
@@ -95,9 +125,36 @@ function startListeners() {
   unsubApts   = col("apts"  ).onSnapshot(s=>{ apts   = s.docs.map(d=>({id:d.id,...d.data()})); renderDashboard(); if(document.getElementById("tab-spaces").classList.contains("active")) renderSpaces(); }, onErr);
 }
 
-async function fsAdd(col_name, data)              { const {id,...r}=data; await col(col_name).doc(id).set(r); return id; }
-async function fsUpdate(col_name, id, data)       { const {id:_,...r}=data; await col(col_name).doc(id).set(r,{merge:true}); }
-async function fsDelete(col_name, id)             { await col(col_name).doc(id).delete(); }
+async function fsAdd(col_name, data) {
+  try {
+    const {id,...r}=data;
+    await col(col_name).doc(id).set(r);
+    return id;
+  } catch(e) {
+    if (e.code === "permission-denied") showFirestorePermissionWarning();
+    else showToast("Erreur de sauvegarde : " + e.message, "error");
+    throw e;
+  }
+}
+async function fsUpdate(col_name, id, data) {
+  try {
+    const {id:_,...r}=data;
+    await col(col_name).doc(id).set(r,{merge:true});
+  } catch(e) {
+    if (e.code === "permission-denied") showFirestorePermissionWarning();
+    else showToast("Erreur de sauvegarde : " + e.message, "error");
+    throw e;
+  }
+}
+async function fsDelete(col_name, id) {
+  try {
+    await col(col_name).doc(id).delete();
+  } catch(e) {
+    if (e.code === "permission-denied") showFirestorePermissionWarning();
+    else showToast("Erreur de suppression : " + e.message, "error");
+    throw e;
+  }
+}
 
 /* ============================================================
    4. LABELS
@@ -1231,10 +1288,22 @@ async function seedDemoData() {
    ============================================================ */
 async function initApp() {
   await loadBuildings();
+
+  // ---- Test de sauvegarde au démarrage ----
+  // Si ce test échoue → les règles Firestore ont expiré → avertissement immédiat
+  try {
+    await db.doc("config/healthcheck").set({ ts: Date.now() });
+  } catch(e) {
+    if (e.code === "permission-denied") {
+      showFirestorePermissionWarning();
+      return; // Inutile de continuer sans accès en écriture
+    }
+  }
+
   await seedDemoData();
   startListeners();
-  startComptaListener();   // écoute les transactions comptabilité
-  startArchiveListener();  // écoute les dossiers archives
+  startComptaListener();
+  startArchiveListener();
   refreshBuildingSelects();
   bindTaskFilters();
   bindOrderFilters();
