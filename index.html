@@ -446,7 +446,7 @@
           <button class="month-nav-btn" id="monthNext" title="Mois suivant">
             <i class="fa-solid fa-chevron-right"></i>
           </button>
-          <button class="month-nav-btn month-today" id="monthToday" title="Ce mois-ci">
+          <button class="month-nav-btn month-today" id="monthToday" title="Mois courant">
             <i class="fa-solid fa-calendar-day"></i>
           </button>
         </div>
@@ -499,26 +499,24 @@
       <div class="month-summary" id="monthSummary">
         <div class="summary-pill summary-in">
           <i class="fa-solid fa-arrow-down"></i>
+          <span class="summary-value" id="summaryIn">0.00 CHF</span>
           <span class="summary-label">Entrées</span>
-          <span class="summary-value" id="summaryIn">0.00</span>
         </div>
-        <div class="summary-sep"><i class="fa-solid fa-minus"></i></div>
         <div class="summary-pill summary-out">
           <i class="fa-solid fa-arrow-up"></i>
+          <span class="summary-value" id="summaryOut">0.00 CHF</span>
           <span class="summary-label">Sorties</span>
-          <span class="summary-value" id="summaryOut">0.00</span>
         </div>
-        <div class="summary-sep"><i class="fa-solid fa-equals"></i></div>
         <div class="summary-pill summary-balance" id="summaryBalancePill">
           <i class="fa-solid fa-scale-balanced"></i>
-          <span class="summary-label">Solde</span>
-          <span class="summary-value" id="summaryBalance">0.00</span>
+          <span class="summary-value" id="summaryBalance">0.00 CHF</span>
+          <span class="summary-label">Solde du mois</span>
         </div>
         <div class="summary-export">
-          <button class="btn btn-secondary" id="btnExportCSV" style="font-size:.8rem;padding:.4rem .85rem">
+          <button class="btn btn-secondary" id="btnExportCSV" style="font-size:.8rem;padding:.45rem .85rem;white-space:nowrap">
             <i class="fa-solid fa-file-csv"></i> CSV
           </button>
-          <button class="btn btn-secondary" id="btnExportMonthPDF" style="font-size:.8rem;padding:.4rem .85rem">
+          <button class="btn btn-secondary" id="btnExportMonthPDF" style="font-size:.8rem;padding:.45rem .85rem;white-space:nowrap">
             <i class="fa-solid fa-file-pdf" style="color:#dc2626"></i> PDF
           </button>
         </div>

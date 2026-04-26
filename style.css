@@ -2487,17 +2487,17 @@ img { display:block; max-width:100%; }
 }
 
 /* ============================================================
-   COMPTABILITÉ v2 — Navigation mensuelle & nouveaux éléments
+   COMPTABILITÉ v2 — Layout propre & lisible
    ============================================================ */
 
-/* ---- Header comptabilité ---- */
+/* ---- Page header avec navigation mois intégrée ---- */
 .compta-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 1.5rem;
-  flex-wrap: wrap;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 .page-title {
   font-size: 1.6rem;
@@ -2506,91 +2506,136 @@ img { display:block; max-width:100%; }
   letter-spacing: -.02em;
 }
 
-/* ---- Navigation mois ---- */
+/* ---- Navigation mois : tout sur une ligne ---- */
 .month-nav {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: .4rem;
+  gap: 0;
   background: var(--white);
   border: 1.5px solid var(--border);
-  border-radius: var(--radius);
-  padding: .4rem .6rem;
+  border-radius: 10px;
+  overflow: hidden;
   box-shadow: var(--shadow);
+  flex-shrink: 0;
 }
 .month-nav-btn {
-  width: 32px; height: 32px;
-  border-radius: 6px;
+  width: 38px;
+  height: 38px;
   border: none;
   background: transparent;
   color: var(--slate);
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: .85rem;
   transition: all var(--transition);
+  flex-shrink: 0;
 }
-.month-nav-btn:hover { background: var(--bg2); color: var(--navy); }
-.month-today { color: var(--blue) !important; }
+.month-nav-btn:hover { background: var(--bg2); color: var(--blue); }
+.month-today { border-left: 1px solid var(--border); color: var(--blue) !important; }
+.month-nav-btn:first-child { border-right: 1px solid var(--border); }
 .month-display {
   font-size: .95rem;
   font-weight: 700;
   color: var(--navy);
-  min-width: 130px;
+  min-width: 140px;
   text-align: center;
-  padding: 0 .5rem;
-  font-family: 'DM Sans', sans-serif;
+  padding: 0 .75rem;
+  border-right: 1px solid var(--border);
+  line-height: 38px;
+  white-space: nowrap;
 }
 
-/* ---- Résumé mensuel ---- */
+/* ---- Cartes soldes ---- */
+/* (déjà dans .compta-soldes, .solde-card — OK) */
+.solde-sub-row { margin-top: .35rem; }
+.solde-sub-row .solde-hint {
+  font-size: .76rem;
+  color: rgba(255,255,255,.6);
+}
+
+/* ---- Résumé mensuel — barre horizontale propre ---- */
 .month-summary {
   display: flex;
-  align-items: center;
-  gap: .75rem;
+  align-items: stretch;
   background: var(--white);
   border-radius: var(--radius);
-  padding: .85rem 1.25rem;
-  margin-bottom: 1.25rem;
   box-shadow: var(--shadow);
-  flex-wrap: wrap;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
 }
 .summary-pill {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: .5rem;
-  padding: .5rem .9rem;
-  border-radius: 99px;
-  font-size: .85rem;
+  justify-content: center;
+  gap: .2rem;
+  flex: 1;
+  padding: .9rem .75rem;
+  border-right: 1px solid var(--border);
+  transition: background var(--transition);
 }
-.summary-pill i { font-size: .8rem; }
-.summary-label { color: var(--text-light); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.summary-value { font-family: 'DM Mono', monospace; font-weight: 700; font-size: .92rem; margin-left: .25rem; }
+.summary-pill:last-of-type { border-right: none; }
+.summary-pill:hover { background: var(--bg); }
+.summary-pill i {
+  font-size: .95rem;
+  opacity: .8;
+}
+.summary-label {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-light);
+}
+.summary-value {
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  font-size: .95rem;
+  letter-spacing: -.01em;
+}
+.summary-sep { display: none; } /* masqué — layout flex suffit */
 
-.summary-in   { background: #fff0e6; }
-.summary-in i, .summary-in .summary-value { color: #c05a1a; }
+.summary-in i,
+.summary-in .summary-value   { color: #c05a1a; }
 
-.summary-out  { background: #f0fff4; }
-.summary-out i, .summary-out .summary-value { color: #276749; }
+.summary-out i,
+.summary-out .summary-value  { color: #276749; }
 
-.summary-balance-pos { background: #e8f5e9; }
-.summary-balance-pos i, .summary-balance-pos .summary-value { color: #276749; }
+.summary-balance-pos i,
+.summary-balance-pos .summary-value { color: #276749; }
+.summary-balance-pos { background: #f0fff4; }
 
+.summary-balance-neg i,
+.summary-balance-neg .summary-value { color: #dc2626; }
 .summary-balance-neg { background: #fef2f2; }
-.summary-balance-neg i, .summary-balance-neg .summary-value { color: #dc2626; }
 
-.summary-sep { color: var(--border); font-size: 1rem; flex-shrink: 0; }
-.summary-export { margin-left: auto; display: flex; gap: .4rem; }
+/* Export : séparé dans sa propre zone */
+.summary-export {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .6rem .85rem;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+}
 
-/* ---- Solde sous-ligne ---- */
-.solde-sub-row { margin-top: .3rem; }
+/* ---- Boutons d'action — conservés tels quels ---- */
+/* (déjà dans .compta-actions, .compta-btn — OK) */
 
-/* ---- En-tête formulaire compta ---- */
+/* ---- En-tête du formulaire ---- */
 .compta-form-header {
   display: flex;
   align-items: center;
   gap: .75rem;
-  padding: .75rem 1rem;
+  padding: .85rem 1rem;
   background: var(--bg);
   border-radius: var(--radius-sm);
   margin-bottom: 1.1rem;
+  border-left: 4px solid var(--border);
 }
 .compta-solde-row {
   display: flex;
@@ -2601,11 +2646,23 @@ img { display:block; max-width:100%; }
   flex: 1;
   background: var(--bg);
   border-radius: var(--radius-sm);
-  padding: .6rem 1rem;
+  padding: .65rem 1rem;
   text-align: center;
+  border: 1px solid var(--border);
 }
-.csm-label { font-size: .7rem; color: var(--text-light); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-.csm-value { font-family: 'DM Mono', monospace; font-weight: 700; font-size: 1.05rem; margin-top: .2rem; }
+.csm-label {
+  font-size: .7rem;
+  color: var(--text-light);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.csm-value {
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin-top: .2rem;
+}
 .csm-orange { color: #c05a1a; }
 .csm-blue   { color: var(--blue); }
 
@@ -2614,7 +2671,7 @@ img { display:block; max-width:100%; }
   display: flex;
   align-items: center;
   gap: .75rem;
-  padding: .65rem 1.25rem;
+  padding: .6rem 1.25rem;
   background: #fffbeb;
   border-bottom: 1px solid #fde68a;
   font-size: .83rem;
@@ -2622,15 +2679,32 @@ img { display:block; max-width:100%; }
   transition: background var(--transition);
 }
 .pending-banner:hover { background: #fef9c3; }
-.pending-banner i { color: #d97706; }
-.pending-banner span:first-of-type { color: #92400e; font-weight: 600; }
-.pending-banner-link { margin-left: auto; color: #a16207; font-weight: 600; }
+.pending-banner i { color: #d97706; flex-shrink: 0; }
+.pending-banner > span:first-of-type { color: #92400e; font-weight: 600; }
+.pending-banner-link { margin-left: auto; color: #a16207; font-weight: 600; white-space: nowrap; }
 
-/* ---- Responsive mois ---- */
-@media(max-width:600px) {
-  .compta-top { flex-direction: column; }
-  .month-nav  { width: 100%; justify-content: center; }
-  .month-summary { flex-direction: column; align-items: flex-start; gap: .5rem; }
-  .summary-export { margin-left: 0; width: 100%; }
-  .summary-export .btn { flex: 1; justify-content: center; }
+/* ---- Historique header amélioré ---- */
+.compta-history-title {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+/* ---- Responsive ---- */
+@media(max-width:768px) {
+  .compta-top { flex-direction: column; align-items: flex-start; }
+  .month-nav  { align-self: stretch; }
+  .month-display { flex: 1; }
+
+  .month-summary { flex-wrap: wrap; }
+  .summary-pill  { flex: 1 1 calc(33% - 1rem); min-width: 80px; padding: .75rem .5rem; }
+  .summary-export { border-left: none; border-top: 1px solid var(--border); width: 100%; justify-content: center; }
+}
+
+@media(max-width:480px) {
+  .summary-pill { flex: 1 1 100%; border-right: none; border-bottom: 1px solid var(--border); }
+  .summary-pill:last-of-type { border-bottom: none; }
 }

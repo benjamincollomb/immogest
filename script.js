@@ -1727,19 +1727,17 @@ function renderCompta() {
   if (banqueHint) banqueHint.textContent = `${banqueMois >= 0 ? "+" : ""}${banqueMois.toFixed(2)} ce mois`;
 
   // Résumé mensuel
-  const monthTx = monthTransactions().filter(t => t.status !== "pending");
+  const monthTx  = monthTransactions().filter(t => t.status !== "pending");
   const totalIn  = monthTx.filter(t => t.type === "entree").reduce((s,t) => s + t.montant, 0);
   const totalOut = monthTx.filter(t => t.type === "sortie" || t.type === "virement").reduce((s,t) => s + t.montant, 0);
   const balance  = totalIn - totalOut;
 
-  document.getElementById("summaryIn").textContent      = totalIn.toFixed(2) + " CHF";
-  document.getElementById("summaryOut").textContent     = totalOut.toFixed(2) + " CHF";
+  document.getElementById("summaryIn").textContent      = "+" + totalIn.toFixed(2) + " CHF";
+  document.getElementById("summaryOut").textContent     = "−" + totalOut.toFixed(2) + " CHF";
   document.getElementById("summaryBalance").textContent = (balance >= 0 ? "+" : "") + balance.toFixed(2) + " CHF";
 
   const balPill = document.getElementById("summaryBalancePill");
-  if (balPill) {
-    balPill.className = "summary-pill " + (balance >= 0 ? "summary-balance-pos" : "summary-balance-neg");
-  }
+  if (balPill) balPill.className = "summary-pill " + (balance >= 0 ? "summary-balance-pos" : "summary-balance-neg");
 
   // Compteur transactions
   const countEl = document.getElementById("txCount");
