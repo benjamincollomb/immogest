@@ -1319,6 +1319,7 @@ async function initApp() {
   startComptaListener();
   startArchiveListener();
   refreshBuildingSelects();
+  refreshComptaBuildingSelect();
   bindTaskFilters();
   bindOrderFilters();
   bindSpaceFilter();
@@ -1614,11 +1615,26 @@ if (btnExportAll) {
 let transactions  = [];
 let unsubCompta   = null;
 let currentMonth  = "";   // "YYYY-MM"
+let currentComptaBuilding = ""; // "" = tous les immeubles
 
 /* ---- Initialiser le mois courant ---- */
 function initCurrentMonth() {
   const now = new Date();
   currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+}
+
+/* ---- Remplir le sélecteur d'immeubles de la comptabilité ---- */
+function refreshComptaBuildingSelect() {
+  const sel = document.getElementById("filterComptaBuilding");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">🏢 Tous les immeubles</option>';
+  BUILDINGS.forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b; opt.textContent = b;
+    if (b === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
 }
 
 /* ---- Formater le mois en affichage ---- */
@@ -1645,10 +1661,19 @@ document.getElementById("monthToday").addEventListener("click", () => {
   document.getElementById("monthDisplay").textContent = formatMonthDisplay(currentMonth);
   renderCompta();
 });
+document.getElementById("filterComptaBuilding").addEventListener("change", e => {
+  currentComptaBuilding = e.target.value;
+  renderCompta();
+});
 
-/* ---- Transactions du mois courant ---- */
-function monthTransactions() {
-  return transactions.filter(t => (t.month || t.date?.slice(0,7)) === currentMonth);
+/* ---- Transactions du mois courant (+ filtre immeuble) ---- */
+function monthTransactions(buildingFilter) {
+  const bld = buildingFilter !== undefined ? buildingFilter : currentComptaBuilding;
+  return transactions.filter(t => {
+    const monthMatch = (t.month || t.date?.slice(0,7)) === currentMonth;
+    const bldMatch   = !bld || (t.building || "") === bld;
+    return monthMatch && bldMatch;
+  });
 }
 
 /* ---- Calculer les soldes du mois ---- */
@@ -1744,7 +1769,8 @@ function renderCompta() {
   if (countEl) countEl.textContent = monthTx.length;
 
   // Vue courante
-  if (currentComptaView === "archives") renderArchiveView();
+  if (currentComptaView === "buildings") renderBuildingView();
+  else if (currentComptaView === "archives") renderArchiveView();
   else renderAllTransactions();
 }
 
@@ -1811,6 +1837,7 @@ function renderAllTransactions() {
           </th>
           <th>Date</th>
           <th>Type</th>
+          <th>Immeuble</th>
           <th>Locataire / Motif</th>
           <th>Description</th>
           <th style="text-align:right">+ Coffre</th>
@@ -1833,6 +1860,9 @@ function renderAllTransactions() {
             </td>
             <td class="td-date">${formatDateFull(t.date)}</td>
             <td>${labelFn(t.status)}</td>
+            <td>${t.building
+              ? `<span class="tag tag-building" style="font-size:.7rem;white-space:nowrap"><i class="fa-solid fa-building"></i> ${escHtml(t.building)}</span>`
+              : `<span style="color:var(--text-light);font-size:.78rem">—</span>`}</td>
             <td class="td-desc" style="font-weight:600;color:var(--navy)">
               ${escHtml(t.tenant || t.motif || "—")}
             </td>
@@ -1980,6 +2010,14 @@ function comptaFormHTML(type) {
     </div>
 
     <div class="form-group">
+      <label>Immeuble <span style="color:var(--text-light);font-weight:400">(optionnel)</span></label>
+      <select id="fComptaBuilding">
+        <option value="">— Général / Tous —</option>
+        ${BUILDINGS.map(b => `<option value="${b}"${currentComptaBuilding===b?' selected':''}>${b}</option>`).join("")}
+      </select>
+    </div>
+
+    <div class="form-group">
       <label>Notes <span style="color:var(--text-light);font-weight:400">(optionnel)</span></label>
       <input id="fComptaDesc" type="text" placeholder="Remarques supplémentaires…"/>
     </div>
@@ -2009,6 +2047,7 @@ async function saveTransaction(type) {
   const description = document.getElementById("fComptaDesc")?.value.trim() || "";
   const tenant  = document.getElementById("fTenant")?.value.trim() || "";
   const motif   = document.getElementById("fMotif")?.value.trim() || "";
+  const building = document.getElementById("fComptaBuilding")?.value || "";
   const pending = document.getElementById("fComptaPending")?.checked || false;
 
   // Validation
@@ -2032,8 +2071,9 @@ async function saveTransaction(type) {
     id: uid(), type,
     status: (type === "entree" && pending) ? "pending" : "confirmed",
     montant, date, month, description,
-    ...(tenant ? { tenant } : {}),
-    ...(motif  ? { motif  } : {}),
+    ...(tenant   ? { tenant }   : {}),
+    ...(motif    ? { motif }    : {}),
+    ...(building ? { building } : {}),
   };
 
   await fsAdd("transactions", newDoc);
@@ -2059,20 +2099,123 @@ document.getElementById("filterComptaType").addEventListener("change", renderCom
 /* ---- Onglets vue ---- */
 document.getElementById("viewTabAll").addEventListener("click", () => {
   currentComptaView = "all";
+  document.querySelectorAll(".compta-view-tab").forEach(t => t.classList.remove("active"));
   document.getElementById("viewTabAll").classList.add("active");
-  document.getElementById("viewTabArchives").classList.remove("active");
   document.getElementById("filterComptaType").classList.remove("hidden");
+  document.getElementById("btnCreateArchive").classList.add("hidden");
+  renderCompta();
+});
+document.getElementById("viewTabBuildings").addEventListener("click", () => {
+  currentComptaView = "buildings";
+  document.querySelectorAll(".compta-view-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("viewTabBuildings").classList.add("active");
+  document.getElementById("filterComptaType").classList.add("hidden");
   document.getElementById("btnCreateArchive").classList.add("hidden");
   renderCompta();
 });
 document.getElementById("viewTabArchives").addEventListener("click", () => {
   currentComptaView = "archives";
+  document.querySelectorAll(".compta-view-tab").forEach(t => t.classList.remove("active"));
   document.getElementById("viewTabArchives").classList.add("active");
-  document.getElementById("viewTabAll").classList.remove("active");
   document.getElementById("filterComptaType").classList.add("hidden");
   document.getElementById("btnCreateArchive").classList.remove("hidden");
   renderCompta();
 });
+
+/* ---- Vue par immeuble ---- */
+function renderBuildingView() {
+  const container = document.getElementById("comptaHistory");
+
+  // Calculer les stats pour chaque immeuble + une ligne "Général"
+  const allBldgs = [...BUILDINGS, ""];  // "" = transactions sans immeuble
+
+  const rows = allBldgs.map(bld => {
+    const txList = monthTransactions(bld).filter(t => t.status !== "pending");
+    if (!txList.length) return null;
+
+    const totalIn   = txList.filter(t => t.type === "entree").reduce((s,t) => s + t.montant, 0);
+    const totalVir  = txList.filter(t => t.type === "virement").reduce((s,t) => s + t.montant, 0);
+    const totalOut  = txList.filter(t => t.type === "sortie").reduce((s,t) => s + t.montant, 0);
+    const balance   = totalIn - totalVir - totalOut;
+    const label     = bld || "Général (sans immeuble)";
+    const countTx   = txList.length;
+
+    return { bld, label, totalIn, totalVir, totalOut, balance, countTx, txList };
+  }).filter(Boolean);
+
+  if (!rows.length) {
+    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-building"></i>Aucune transaction ce mois</p>`;
+    return;
+  }
+
+  container.innerHTML = rows.map(r => {
+    const balColor = r.balance >= 0 ? "#276749" : "#dc2626";
+    const balBg    = r.balance >= 0 ? "#f0fff4"  : "#fef2f2";
+    const txRows   = r.txList.map(t => `
+      <tr>
+        <td class="td-date">${formatDateFull(t.date)}</td>
+        <td>${t.type === "entree"
+              ? '<span class="tag tag-entree" style="font-size:.7rem">Entrée</span>'
+              : t.type === "virement"
+              ? '<span class="tag tag-virement" style="font-size:.7rem">Virement</span>'
+              : '<span class="tag tag-sortie" style="font-size:.7rem">Sortie</span>'}</td>
+        <td class="td-desc">${escHtml(t.tenant || t.motif || "—")}</td>
+        <td class="amount-col">
+          ${t.type==="entree"   ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : ""}
+          ${t.type==="virement" ? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : ""}
+          ${t.type==="sortie"   ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : ""}
+        </td>
+      </tr>`).join("");
+
+    return `
+    <div class="bld-compta-block">
+      <!-- En-tête immeuble cliquable -->
+      <div class="bld-compta-header" data-bld="${escHtml(r.bld)}">
+        <div class="bld-compta-icon">
+          <i class="fa-solid fa-building"></i>
+        </div>
+        <div class="bld-compta-info">
+          <div class="bld-compta-name">${escHtml(r.label)}</div>
+          <div class="bld-compta-meta">
+            <span>${r.countTx} transaction${r.countTx>1?"s":""}</span>
+            ${r.totalIn  ? `<span class="bld-stat-in">+${chf(r.totalIn)}</span>` : ""}
+            ${r.totalVir ? `<span class="bld-stat-vir">⇄ ${chf(r.totalVir)}</span>` : ""}
+            ${r.totalOut ? `<span class="bld-stat-out">−${chf(r.totalOut)}</span>` : ""}
+          </div>
+        </div>
+        <div class="bld-compta-balance" style="color:${balColor};background:${balBg}">
+          ${r.balance >= 0 ? "+" : ""}${chf(r.balance)}
+        </div>
+        <i class="fa-solid fa-chevron-down bld-compta-chev" id="bld-chev-${escHtml(r.bld||'general')}"></i>
+      </div>
+      <!-- Détail dépliable -->
+      <div class="bld-compta-body" id="bld-body-${escHtml(r.bld||'general')}">
+        <div style="overflow-x:auto">
+        <table class="compta-table">
+          <thead><tr>
+            <th>Date</th><th>Type</th><th>Locataire / Motif</th>
+            <th style="text-align:right">Montant</th>
+          </tr></thead>
+          <tbody>${txRows}</tbody>
+        </table>
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Toggle dépliage
+  container.querySelectorAll(".bld-compta-header").forEach(hdr => {
+    hdr.addEventListener("click", () => {
+      const bld  = hdr.dataset.bld;
+      const key  = bld || "general";
+      const body = document.getElementById(`bld-body-${key}`);
+      const chev = document.getElementById(`bld-chev-${key}`);
+      if (!body) return;
+      body.classList.toggle("open");
+      if (chev) chev.classList.toggle("open");
+    });
+  });
+}
 
 /* ---- Archives ---- */
 let archives      = [];
