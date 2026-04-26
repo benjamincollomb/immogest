@@ -589,6 +589,29 @@
     </div>
   </div>
 
+  <!-- ======================================================
+       ÉCRAN DE BIENVENUE
+  ====================================================== -->
+  <div class="welcome-overlay hidden" id="welcomeOverlay">
+    <div class="welcome-card">
+      <div class="welcome-logo">
+        <img src="logo.png" alt="ImmoGest"/>
+      </div>
+      <div class="welcome-avatar-wrap">
+        <div class="welcome-avatar" id="welcomeAvatarIcon">
+          <i class="fa-solid fa-user-tie"></i>
+        </div>
+        <img id="welcomeAvatar" src="" alt="" style="display:none;width:88px;height:88px;object-fit:cover;border-radius:50%;border:3px solid rgba(255,255,255,.3)"/>
+      </div>
+      <div class="welcome-greeting">Bonjour,</div>
+      <div class="welcome-name" id="welcomeName">Benjamin</div>
+      <div class="welcome-sub">Bienvenue sur ImmoGest</div>
+      <div class="welcome-dots">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer"></div>
 
   <!-- Firebase SDK (compat v10) -->

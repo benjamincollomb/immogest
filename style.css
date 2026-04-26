@@ -2215,3 +2215,247 @@ img { display:block; max-width:100%; }
   border-color: rgba(255,255,255,.2);
 }
 .sel-btn-cancel:hover { background: rgba(255,255,255,.2); color: var(--white); }
+
+/* ============================================================
+   ÉCRAN DE BIENVENUE
+   ============================================================ */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: linear-gradient(145deg, var(--navy) 0%, var(--navy-light) 50%, #1a3a6b 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: welcomeIn .4s ease;
+}
+.welcome-overlay.hidden { display: none; }
+.welcome-overlay.welcome-out {
+  animation: welcomeOut .5s ease forwards;
+}
+
+@keyframes welcomeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes welcomeOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.04); }
+}
+
+.welcome-card {
+  text-align: center;
+  color: #fff;
+  padding: 2rem;
+  animation: welcomeCardIn .5s cubic-bezier(.34,1.56,.64,1) .1s both;
+}
+@keyframes welcomeCardIn {
+  from { transform: translateY(30px) scale(.96); opacity: 0; }
+  to   { transform: translateY(0) scale(1);      opacity: 1; }
+}
+
+.welcome-logo {
+  margin-bottom: 1.5rem;
+}
+.welcome-logo img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(0,0,0,.3));
+}
+
+.welcome-avatar-wrap {
+  margin: 0 auto 1.25rem;
+  width: 88px;
+  height: 88px;
+}
+.welcome-avatar {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--navy-light);
+  border: 3px solid rgba(255,255,255,.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  color: rgba(255,255,255,.7);
+  margin: 0 auto;
+}
+
+.welcome-greeting {
+  font-size: 1rem;
+  color: rgba(255,255,255,.6);
+  font-weight: 400;
+  letter-spacing: .05em;
+}
+.welcome-name {
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  margin: .1rem 0 .4rem;
+  background: linear-gradient(90deg, #fff 40%, var(--orange-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.welcome-sub {
+  font-size: .9rem;
+  color: rgba(255,255,255,.5);
+  letter-spacing: .04em;
+  margin-bottom: 1.75rem;
+}
+
+/* Points de chargement animés */
+.welcome-dots {
+  display: flex;
+  justify-content: center;
+  gap: .5rem;
+}
+.welcome-dots span {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.3);
+  animation: dotPulse 1.2s ease-in-out infinite;
+}
+.welcome-dots span:nth-child(2) { animation-delay: .2s; }
+.welcome-dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes dotPulse {
+  0%,100% { background: rgba(255,255,255,.2); transform: scale(.8); }
+  50%     { background: var(--orange-light);  transform: scale(1.2); }
+}
+
+/* ============================================================
+   RESPONSIVE MOBILE — Améliorations complètes
+   ============================================================ */
+
+/* ---- Sidebar mobile ---- */
+@media(max-width:768px) {
+
+  /* Sidebar plus large sur mobile */
+  .sidebar { width: 280px; }
+
+  /* Topbar */
+  .topbar {
+    padding: 0 .85rem;
+    height: 58px;
+  }
+
+  /* Contenu principal */
+  .tab-content {
+    padding: 1rem .9rem 5rem; /* padding bas pour les barres flottantes */
+  }
+
+  /* Page header empilé */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+  }
+  .page-header h1 { font-size: 1.35rem; }
+
+  /* KPI grid 2 colonnes */
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: .65rem; }
+  .kpi-value { font-size: 1.5rem; }
+  .kpi-card  { padding: 1rem; gap: .7rem; }
+  .kpi-icon  { width: 38px; height: 38px; font-size: 1rem; }
+
+  /* Dashboard grid empilé */
+  .dashboard-grid { grid-template-columns: 1fr; gap: .85rem; }
+  .buildings-grid  { grid-template-columns: repeat(3,1fr); gap: .5rem; padding: .85rem; }
+
+  /* Tâches : grille simplifiée */
+  .task-card {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: .6rem;
+    padding: .9rem 1rem;
+  }
+  .task-card .task-actions {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
+
+  /* Filtres empilés */
+  .filters-bar {
+    flex-direction: column;
+    gap: .65rem;
+    padding: .85rem;
+  }
+  .filter-group select,
+  .filter-group input { min-width: unset; width: 100%; }
+  .search-group { width: 100%; }
+
+  /* Commandes : cartes */
+  .order-card-header { flex-wrap: wrap; gap: .5rem; }
+  .order-summary-count { display: none; } /* masqué sur mobile, info déjà visible */
+
+  /* Tableau comptabilité : scroll horizontal */
+  .compta-table { font-size: .78rem; min-width: 600px; }
+  .compta-table thead th, .compta-table td { padding: .6rem .75rem; }
+
+  /* Cartes soldes : 1 colonne */
+  .compta-soldes { grid-template-columns: 1fr; gap: .65rem; }
+  .solde-amount  { font-size: 1.6rem; }
+
+  /* Boutons compta : liste verticale (déjà ok) */
+
+  /* Sélection bar : texte court */
+  .selection-bar { padding: .7rem 1rem; bottom: .75rem; }
+  .sel-btn { padding: .42rem .75rem; font-size: .78rem; }
+  .sel-btn i { display: none; }
+
+  /* Modal : plein écran en bas */
+  .modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: 18px 18px 0 0;
+    margin-top: auto;
+  }
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  /* Spaces grid : 1 colonne */
+  .spaces-grid { grid-template-columns: 1fr; }
+
+  /* Btn group : pleine largeur */
+  .btn-group { width: 100%; }
+  .btn-group .btn { flex: 1; justify-content: center; }
+
+  /* Admin panel */
+  .admin-modal { margin: .5rem; max-height: 95vh; border-radius: 14px; }
+  .profile-section { flex-direction: column; align-items: center; }
+
+  /* Compta history header */
+  .compta-history-header { flex-direction: column; align-items: flex-start; gap: .6rem; }
+  .compta-header-controls { width: 100%; }
+  .compta-view-tabs { width: 100%; }
+  .compta-view-tab { flex: 1; justify-content: center; }
+  .compta-filter { width: 100%; }
+}
+
+/* ---- Très petits écrans (< 400px) ---- */
+@media(max-width:400px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-label { font-size: .68rem; }
+  .buildings-grid { grid-template-columns: repeat(2,1fr); }
+  .topbar-title { font-size: .88rem; }
+}
+
+/* ---- Tablette (768–1024px) ---- */
+@media(min-width:769px) and (max-width:1024px) {
+  :root { --sidebar-w: 220px; }
+  .kpi-grid { grid-template-columns: repeat(3,1fr); }
+  .tab-content { padding: 1.5rem 1.25rem 2.5rem; }
+}
+
+/* ---- Touch : zones de clic plus larges ---- */
+@media(hover: none) {
+  .btn-icon { padding: .55rem; }
+  .nav-item  { padding: .9rem 1rem; }
+  .compta-btn { padding: 1.1rem 1.1rem; }
+  .task-status-btn { width: 32px; height: 32px; }
+}

@@ -319,10 +319,8 @@ function showRegisterError(msg) {
 /* ---- Déconnexion ---- */
 document.getElementById("navLogout").addEventListener("click", async e => {
   e.preventDefault();
-  if (!confirm("Se déconnecter de ImmoGest ?")) return;
   closeMobileSidebar();
   await auth.signOut();
-  // onAuthStateChanged affiche le login
 });
 
 /* ============================================================
@@ -425,6 +423,8 @@ async function startAuthListener() {
     if (user) {
       currentUser = user;
       hideLogin();
+      // Afficher l'écran de bienvenue puis initialiser l'app
+      await showWelcomeScreen(user);
       await updateAvatarUI(user.photoURL, user.displayName);
       await initApp();
     } else {
@@ -433,9 +433,56 @@ async function startAuthListener() {
       if(unsubOrders) unsubOrders();
       if(unsubSpaces) unsubSpaces();
       if(unsubApts)   unsubApts();
+      hideWelcomeScreen();
       showLogin();
     }
   });
+}
+
+/* ---- Écran de bienvenue ---- */
+function showWelcomeScreen(user) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById("welcomeOverlay");
+    const nameEl  = document.getElementById("welcomeName");
+    const imgEl   = document.getElementById("welcomeAvatar");
+    const iconEl  = document.getElementById("welcomeAvatarIcon");
+
+    const firstName = (user.displayName || "Bienvenue").split(" ")[0];
+    if (nameEl) nameEl.textContent = firstName;
+
+    // Avatar
+    const photo = user.photoURL;
+    if (imgEl && iconEl) {
+      if (photo) {
+        imgEl.src = photo;
+        imgEl.style.display = "block";
+        iconEl.style.display = "none";
+      } else {
+        imgEl.style.display = "none";
+        iconEl.style.display = "flex";
+      }
+    }
+
+    overlay.classList.remove("hidden");
+
+    // Disparaît automatiquement après 2.2s
+    setTimeout(() => {
+      overlay.classList.add("welcome-out");
+      setTimeout(() => {
+        overlay.classList.add("hidden");
+        overlay.classList.remove("welcome-out");
+        resolve();
+      }, 500);
+    }, 2200);
+  });
+}
+
+function hideWelcomeScreen() {
+  const overlay = document.getElementById("welcomeOverlay");
+  if (overlay) {
+    overlay.classList.add("hidden");
+    overlay.classList.remove("welcome-out");
+  }
 }
 
 /* ============================================================
