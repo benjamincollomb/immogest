@@ -1736,23 +1736,47 @@ function renderCompta() {
   // Navigation mois
   document.getElementById("monthDisplay").textContent = formatMonthDisplay(currentMonth);
 
-  // Soldes du mois courant (pour l'affichage mensuel)
-  const { coffre: coffreMois, banque: banqueMois } = getMonthSoldes(currentMonth);
-  // Soldes cumulatifs (réels)
-  const { coffre: coffreTotal, banque: banqueTotal } = getCumulativeSoldes();
+  const bld = currentComptaBuilding; // "" = tous, sinon nom de l'immeuble
+
+  // Calcul des soldes selon le filtre actif
+  // Si un immeuble est sélectionné → calcul basé uniquement sur ses transactions
+  // Si aucun → soldes cumulatifs réels (tous immeubles)
+  function calcSoldes(txList) {
+    let coffre = 0, banque = 0;
+    for (const t of txList.filter(t => t.status !== "pending")) {
+      if (t.type === "entree")   coffre += t.montant;
+      if (t.type === "virement") { coffre -= t.montant; banque += t.montant; }
+      if (t.type === "sortie")   banque -= t.montant;
+    }
+    return {
+      coffre: Math.round(coffre * 100) / 100,
+      banque: Math.round(banque * 100) / 100
+    };
+  }
+
+  // Transactions tous mois (filtré immeuble) pour les soldes cumulatifs
+  const allTxBld = bld
+    ? transactions.filter(t => (t.building || "") === bld)
+    : transactions;
+  const { coffre: coffreTotal, banque: banqueTotal } = calcSoldes(allTxBld);
+
+  // Transactions du mois courant (filtré immeuble) pour les hints
+  const monthTxBld = monthTransactions(); // déjà filtré par immeuble
+  const { coffre: coffreMois, banque: banqueMois } = calcSoldes(monthTxBld);
 
   document.getElementById("soldeCoffre").textContent = chf(coffreTotal);
   document.getElementById("soldeBanque").textContent = chf(banqueTotal);
   document.getElementById("soldeTotal").textContent  = chf(coffreTotal + banqueTotal);
 
-  // Sous-titres des cartes
+  // Sous-titres avec indication du filtre actif
   const coffreHint = document.getElementById("soldeCoffreHint");
   const banqueHint = document.getElementById("soldeBanqueHint");
-  if (coffreHint) coffreHint.textContent = `${coffreMois >= 0 ? "+" : ""}${coffreMois.toFixed(2)} ce mois`;
-  if (banqueHint) banqueHint.textContent = `${banqueMois >= 0 ? "+" : ""}${banqueMois.toFixed(2)} ce mois`;
+  const hintSuffix = bld ? ` ce mois · ${bld}` : " ce mois";
+  if (coffreHint) coffreHint.textContent = `${coffreMois >= 0 ? "+" : ""}${coffreMois.toFixed(2)}${hintSuffix}`;
+  if (banqueHint) banqueHint.textContent = `${banqueMois >= 0 ? "+" : ""}${banqueMois.toFixed(2)}${hintSuffix}`;
 
-  // Résumé mensuel
-  const monthTx  = monthTransactions().filter(t => t.status !== "pending");
+  // Résumé mensuel (filtré immeuble)
+  const monthTx  = monthTxBld.filter(t => t.status !== "pending");
   const totalIn  = monthTx.filter(t => t.type === "entree").reduce((s,t) => s + t.montant, 0);
   const totalOut = monthTx.filter(t => t.type === "sortie" || t.type === "virement").reduce((s,t) => s + t.montant, 0);
   const balance  = totalIn - totalOut;
@@ -2423,14 +2447,20 @@ document.getElementById("btnClearSelection").addEventListener("click", () => {
   selectedTxIds.clear(); updateSelectionBar(); renderAllTransactions();
 });
 
-/* ---- Export CSV ---- */
+/* ---- Export CSV (respecte le filtre immeuble actif) ---- */
 document.getElementById("btnExportCSV").addEventListener("click", () => {
   const list = monthTransactions().filter(t => t.status !== "pending");
   if (!list.length) { showToast("Aucune transaction à exporter.", "info"); return; }
 
-  const headers = ["Date","Type","Locataire / Motif","Description","Entrée coffre CHF","Sortie coffre CHF","Sortie banque CHF"];
+  const bld      = currentComptaBuilding;
+  const bldLabel = bld || "Tous immeubles";
+  const month    = formatMonthDisplay(currentMonth);
+
+  const headers = ["Date","Immeuble","Type","Locataire / Motif","Description",
+                   "Entrée coffre CHF","Sortie coffre CHF","Sortie banque CHF"];
   const rows = list.map(t => [
     formatDateFull(t.date),
+    t.building || "Général",
     t.type === "entree" ? "Entrée coffre" : t.type === "virement" ? "Coffre→Banque" : "Sortie banque",
     t.tenant || t.motif || "",
     t.description || "",
@@ -2439,82 +2469,138 @@ document.getElementById("btnExportCSV").addEventListener("click", () => {
     t.type === "sortie"   ? t.montant.toFixed(2) : "",
   ]);
 
-  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `ImmoGest_${formatMonthDisplay(currentMonth).replace(/ /g,"_")}.csv`;
+  // Ligne de résumé en bas
+  const totalIn  = list.filter(t=>t.type==="entree").reduce((s,t)=>s+t.montant,0);
+  const totalOut = list.filter(t=>t.type==="sortie"||t.type==="virement").reduce((s,t)=>s+t.montant,0);
+  rows.push([]);
+  rows.push(["TOTAL",bldLabel,"","","",totalIn.toFixed(2),
+    list.filter(t=>t.type==="virement").reduce((s,t)=>s+t.montant,0).toFixed(2),
+    list.filter(t=>t.type==="sortie").reduce((s,t)=>s+t.montant,0).toFixed(2)]);
+
+  const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v||"").replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type:"text/csv;charset=utf-8" });
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = `ImmoGest_${month.replace(/ /g,"_")}${bld?"_"+bld.replace(/ /g,"_"):""}.csv`;
   a.click();
-  showToast("Export CSV téléchargé !", "success");
+  showToast(`CSV "${a.download}" téléchargé !`, "success");
 });
 
-/* ---- Export PDF mensuel ---- */
+/* ---- Export PDF mensuel (respecte le filtre immeuble actif) ---- */
 document.getElementById("btnExportMonthPDF").addEventListener("click", async () => {
   const list = monthTransactions().filter(t => t.status !== "pending");
   if (!list.length) { showToast("Aucune transaction à exporter.", "info"); return; }
   if (typeof window.jspdf === "undefined") { showToast("PDF en cours de chargement, réessaie.", "info"); return; }
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
-  const NAVY=[26,38,64], BLUE=[30,92,191], ORANGE=[232,106,26], LGRAY=[240,243,251];
-  const PAGE_W=297, M=15, TODAY=new Date().toLocaleDateString("fr-CH");
+  const bld        = currentComptaBuilding;
+  const bldLabel   = bld || "Tous les immeubles";
   const MONTH_LABEL = formatMonthDisplay(currentMonth);
 
-  // Header
-  doc.setFillColor(...NAVY); doc.rect(0,0,PAGE_W,30,"F");
-  doc.setFillColor(...ORANGE); doc.rect(0,30,PAGE_W,2,"F");
-  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
-  doc.text("ImmoGest — Rapport mensuel", M, 14);
-  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(160,180,220);
-  doc.text(MONTH_LABEL, M, 22);
-  doc.setTextColor(255,255,255); doc.text(`Généré le ${TODAY}`, PAGE_W-M, 22, {align:"right"});
+  const { jsPDF } = window.jspdf;
+  const doc  = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
+  const NAVY = [26,38,64], BLUE = [30,92,191], ORANGE = [232,106,26], LGRAY = [240,243,251];
+  const GREEN= [40,120,80], RED  = [180,40,40];
+  const PAGE_W = 297, M = 15;
+  const TODAY  = new Date().toLocaleDateString("fr-CH");
 
-  // Résumé
-  const { coffre, banque } = getCumulativeSoldes();
+  // ---- Header ----
+  doc.setFillColor(...NAVY); doc.rect(0,0,PAGE_W,32,"F");
+  doc.setFillColor(...ORANGE); doc.rect(0,32,PAGE_W,2.5,"F");
+
+  doc.setFont("helvetica","bold"); doc.setFontSize(17); doc.setTextColor(255,255,255);
+  doc.text("ImmoGest — Rapport mensuel", M, 14);
+
+  doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(160,180,220);
+  doc.text(MONTH_LABEL, M, 22);
+
+  // Badge immeuble dans l'en-tête
+  if (bld) {
+    doc.setFillColor(232,106,26);
+    doc.roundedRect(M + doc.getTextWidth(MONTH_LABEL) + 4, 17.5, doc.getTextWidth(bld) + 8, 6.5, 2, 2, "F");
+    doc.setFont("helvetica","bold"); doc.setFontSize(7.5); doc.setTextColor(255,255,255);
+    doc.text(bld, M + doc.getTextWidth(MONTH_LABEL) + 8, 22);
+  }
+
+  doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(200,210,230);
+  doc.text(`Généré le ${TODAY}`, PAGE_W-M, 22, {align:"right"});
+
+  // ---- Cartes résumé ----
+  // Calcul basé uniquement sur les transactions filtrées
   const totalIn  = list.filter(t=>t.type==="entree").reduce((s,t)=>s+t.montant,0);
-  const totalOut = list.filter(t=>t.type==="sortie"||t.type==="virement").reduce((s,t)=>s+t.montant,0);
+  const totalVir = list.filter(t=>t.type==="virement").reduce((s,t)=>s+t.montant,0);
+  const totalOut = list.filter(t=>t.type==="sortie").reduce((s,t)=>s+t.montant,0);
+  const balance  = totalIn - totalVir - totalOut;
+
+  // Soldes cumulatifs filtrés sur l'immeuble
+  const allTxBld = bld ? transactions.filter(t=>(t.building||"")===bld) : transactions;
+  let coffreCum = 0, banqueCum = 0;
+  for (const t of allTxBld.filter(t=>t.status!=="pending")) {
+    if (t.type==="entree")   coffreCum += t.montant;
+    if (t.type==="virement") { coffreCum -= t.montant; banqueCum += t.montant; }
+    if (t.type==="sortie")   banqueCum -= t.montant;
+  }
+  coffreCum = Math.round(coffreCum*100)/100;
+  banqueCum = Math.round(banqueCum*100)/100;
+
   let y = 42;
   const pills = [
-    {l:"Coffre liquide", v:chf(coffre), c:ORANGE},
-    {l:"Compte bancaire",v:chf(banque), c:BLUE},
-    {l:"Entrées mois",   v:"+"+chf(totalIn),  c:[40,120,80]},
-    {l:"Sorties mois",   v:"−"+chf(totalOut), c:[180,40,40]},
+    { l:`Coffre liquide${bld?" ("+bld+")":""}`, v: chf(coffreCum),  c: ORANGE },
+    { l:`Compte bancaire${bld?" ("+bld+")":""}`,v: chf(banqueCum),  c: BLUE   },
+    { l:"Entrées du mois",                        v: "+"+chf(totalIn), c: GREEN  },
+    { l:"Sorties du mois",                        v: "−"+chf(totalOut+totalVir), c: RED   },
+    { l:"Solde net",                               v: (balance>=0?"+":"")+chf(balance),
+      c: balance >= 0 ? GREEN : RED },
   ];
-  pills.forEach((p,i) => {
-    const x = M + i*(PAGE_W-2*M)/4;
-    doc.setFillColor(...LGRAY); doc.roundedRect(x,y,60,18,2,2,"F");
-    doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(100,116,148);
-    doc.text(p.l, x+5, y+6);
-    doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(...p.c);
-    doc.text(p.v, x+5, y+14);
+  const pillW = (PAGE_W - 2*M) / pills.length;
+  pills.forEach((p, i) => {
+    const x = M + i * pillW;
+    doc.setFillColor(...LGRAY); doc.roundedRect(x, y, pillW-3, 20, 2, 2, "F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(100,116,148);
+    // Tronquer le label si trop long
+    const maxW = pillW - 8;
+    let label = p.l;
+    while (doc.getTextWidth(label) > maxW && label.length > 5) label = label.slice(0,-1);
+    doc.text(label, x+4, y+7);
+    doc.setFont("helvetica","bold"); doc.setFontSize(9.5); doc.setTextColor(...p.c);
+    doc.text(p.v, x+4, y+16);
   });
 
-  // Tableau
+  // ---- Tableau transactions ----
   doc.autoTable({
-    startY: y+25, margin:{left:M,right:M},
-    head:[["Date","Type","Locataire / Motif","Description","+ Coffre","− Coffre","− Banque"]],
-    body: list.map(t=>[
+    startY: y + 27,
+    margin: { left:M, right:M },
+    head: [["Date","Immeuble","Type","Locataire / Motif","Description","+ Coffre","− Coffre","− Banque"]],
+    body: list.map(t => [
       formatDateFull(t.date),
-      t.type==="entree"?"Entrée coffre":t.type==="virement"?"Coffre→Banque":"Sortie banque",
-      t.tenant||t.motif||"—",
-      t.description||"",
-      t.type==="entree"  ?"+"+chf(t.montant):"—",
-      t.type==="virement"?"−"+chf(t.montant):"—",
-      t.type==="sortie"  ?"−"+chf(t.montant):"—",
+      t.building || "Général",
+      t.type==="entree" ? "Entrée coffre" : t.type==="virement" ? "Coffre→Banque" : "Sortie banque",
+      t.tenant || t.motif || "—",
+      t.description || "",
+      t.type==="entree"   ? "+"+chf(t.montant) : "—",
+      t.type==="virement" ? "−"+chf(t.montant) : "—",
+      t.type==="sortie"   ? "−"+chf(t.montant) : "—",
     ]),
-    styles:{font:"helvetica",fontSize:8,cellPadding:3,textColor:[...NAVY]},
-    headStyles:{fillColor:[...BLUE],textColor:[255,255,255],fontStyle:"bold"},
-    alternateRowStyles:{fillColor:[...LGRAY]},
+    styles: { font:"helvetica", fontSize:8, cellPadding:3, textColor:[...NAVY] },
+    headStyles: { fillColor:[...BLUE], textColor:[255,255,255], fontStyle:"bold", fontSize:7.5 },
+    alternateRowStyles: { fillColor:[...LGRAY] },
+    // Ligne de total en bas du tableau
+    foot: [["","","TOTAL","","",
+      "+"+chf(totalIn), "−"+chf(totalVir), "−"+chf(totalOut)]],
+    footStyles: { fillColor:[...NAVY], textColor:[255,255,255], fontStyle:"bold", fontSize:8 },
   });
 
-  // Footer
-  const h = doc.internal.pageSize.height;
-  doc.setFillColor(...NAVY); doc.rect(0,h-10,PAGE_W,10,"F");
+  // ---- Footer ----
+  const ph = doc.internal.pageSize.height;
+  doc.setFillColor(...NAVY); doc.rect(0, ph-12, PAGE_W, 12, "F");
   doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,200);
-  doc.text(`ImmoGest • ${MONTH_LABEL} • Généré le ${TODAY}`, PAGE_W/2, h-4, {align:"center"});
+  doc.text(
+    `ImmoGest • ${MONTH_LABEL}${bld ? " • "+bld : ""} • ${list.length} transaction${list.length>1?"s":""} • Généré le ${TODAY}`,
+    PAGE_W/2, ph-5, { align:"center" }
+  );
 
-  doc.save(`ImmoGest_${MONTH_LABEL.replace(/ /g,"_")}.pdf`);
-  showToast("PDF mensuel téléchargé !", "success");
+  const filename = `ImmoGest_${MONTH_LABEL.replace(/ /g,"_")}${bld?"_"+bld.replace(/ /g,"_"):""}.pdf`;
+  doc.save(filename);
+  showToast(`PDF "${filename}" téléchargé !`, "success");
 });
 
 TAB_TITLES["compta"] = "Comptabilité";
