@@ -2459,3 +2459,152 @@ img { display:block; max-width:100%; }
   .compta-btn { padding: 1.1rem 1.1rem; }
   .task-status-btn { width: 32px; height: 32px; }
 }
+
+/* ============================================================
+   COMPTABILITÉ v2 — Navigation mensuelle & nouveaux éléments
+   ============================================================ */
+
+/* ---- Header comptabilité ---- */
+.compta-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.page-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -.02em;
+}
+
+/* ---- Navigation mois ---- */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: .4rem .6rem;
+  box-shadow: var(--shadow);
+}
+.month-nav-btn {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem;
+  transition: all var(--transition);
+}
+.month-nav-btn:hover { background: var(--bg2); color: var(--navy); }
+.month-today { color: var(--blue) !important; }
+.month-display {
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--navy);
+  min-width: 130px;
+  text-align: center;
+  padding: 0 .5rem;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ---- Résumé mensuel ---- */
+.month-summary {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: .85rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+  flex-wrap: wrap;
+}
+.summary-pill {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .9rem;
+  border-radius: 99px;
+  font-size: .85rem;
+}
+.summary-pill i { font-size: .8rem; }
+.summary-label { color: var(--text-light); font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.summary-value { font-family: 'DM Mono', monospace; font-weight: 700; font-size: .92rem; margin-left: .25rem; }
+
+.summary-in   { background: #fff0e6; }
+.summary-in i, .summary-in .summary-value { color: #c05a1a; }
+
+.summary-out  { background: #f0fff4; }
+.summary-out i, .summary-out .summary-value { color: #276749; }
+
+.summary-balance-pos { background: #e8f5e9; }
+.summary-balance-pos i, .summary-balance-pos .summary-value { color: #276749; }
+
+.summary-balance-neg { background: #fef2f2; }
+.summary-balance-neg i, .summary-balance-neg .summary-value { color: #dc2626; }
+
+.summary-sep { color: var(--border); font-size: 1rem; flex-shrink: 0; }
+.summary-export { margin-left: auto; display: flex; gap: .4rem; }
+
+/* ---- Solde sous-ligne ---- */
+.solde-sub-row { margin-top: .3rem; }
+
+/* ---- En-tête formulaire compta ---- */
+.compta-form-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1.1rem;
+}
+.compta-solde-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.compta-solde-mini {
+  flex: 1;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: .6rem 1rem;
+  text-align: center;
+}
+.csm-label { font-size: .7rem; color: var(--text-light); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.csm-value { font-family: 'DM Mono', monospace; font-weight: 700; font-size: 1.05rem; margin-top: .2rem; }
+.csm-orange { color: #c05a1a; }
+.csm-blue   { color: var(--blue); }
+
+/* ---- Bandeau en attente ---- */
+.pending-banner {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .65rem 1.25rem;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  font-size: .83rem;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.pending-banner:hover { background: #fef9c3; }
+.pending-banner i { color: #d97706; }
+.pending-banner span:first-of-type { color: #92400e; font-weight: 600; }
+.pending-banner-link { margin-left: auto; color: #a16207; font-weight: 600; }
+
+/* ---- Responsive mois ---- */
+@media(max-width:600px) {
+  .compta-top { flex-direction: column; }
+  .month-nav  { width: 100%; justify-content: center; }
+  .month-summary { flex-direction: column; align-items: flex-start; gap: .5rem; }
+  .summary-export { margin-left: 0; width: 100%; }
+  .summary-export .btn { flex: 1; justify-content: center; }
+}

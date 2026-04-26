@@ -428,20 +428,32 @@
     </section>
 
     <!-- ======================================================
-         TAB: COMPTABILITÉ
+         TAB: COMPTABILITÉ v2 — Gestion mensuelle
     ====================================================== -->
     <section class="tab-content" id="tab-compta">
 
-      <div class="page-header">
+      <!-- ===== EN-TÊTE + NAVIGATION MENSUELLE ===== -->
+      <div class="compta-top">
         <div>
-          <h1>Comptabilité</h1>
-          <p class="subtitle">Coffre liquide & Compte bancaire</p>
+          <h1 class="page-title">Comptabilité</h1>
+          <p class="subtitle">Gestion mensuelle des flux</p>
+        </div>
+        <div class="month-nav">
+          <button class="month-nav-btn" id="monthPrev" title="Mois précédent">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <div class="month-display" id="monthDisplay">Avril 2026</div>
+          <button class="month-nav-btn" id="monthNext" title="Mois suivant">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+          <button class="month-nav-btn month-today" id="monthToday" title="Ce mois-ci">
+            <i class="fa-solid fa-calendar-day"></i>
+          </button>
         </div>
       </div>
 
-      <!-- ===== CARTES SOLDE ===== -->
+      <!-- ===== CARTES SOLDES ===== -->
       <div class="compta-soldes">
-
         <div class="solde-card solde-coffre">
           <div class="solde-card-bg"></div>
           <div class="solde-card-inner">
@@ -450,10 +462,11 @@
               <span class="solde-chip">Cash</span>
             </div>
             <div class="solde-amount" id="soldeCoffre">0.00 CHF</div>
-            <div class="solde-hint">Recharges puces de lavage</div>
+            <div class="solde-sub-row">
+              <span class="solde-hint" id="soldeCoffreHint">ce mois</span>
+            </div>
           </div>
         </div>
-
         <div class="solde-card solde-banque">
           <div class="solde-card-bg"></div>
           <div class="solde-card-inner">
@@ -462,10 +475,11 @@
               <span class="solde-chip">Banque</span>
             </div>
             <div class="solde-amount" id="soldeBanque">0.00 CHF</div>
-            <div class="solde-hint">Paiements factures régie</div>
+            <div class="solde-sub-row">
+              <span class="solde-hint" id="soldeBanqueHint">ce mois</span>
+            </div>
           </div>
         </div>
-
         <div class="solde-card solde-total">
           <div class="solde-card-bg"></div>
           <div class="solde-card-inner">
@@ -474,59 +488,79 @@
               <span class="solde-chip">Total</span>
             </div>
             <div class="solde-amount" id="soldeTotal">0.00 CHF</div>
-            <div class="solde-hint">Coffre + Banque</div>
+            <div class="solde-sub-row">
+              <span class="solde-hint">Coffre + Banque</span>
+            </div>
           </div>
         </div>
-
       </div>
 
-      <!-- ===== 3 BOUTONS D'ACTION ===== -->
-      <div class="compta-actions">
+      <!-- ===== RÉSUMÉ MENSUEL ===== -->
+      <div class="month-summary" id="monthSummary">
+        <div class="summary-pill summary-in">
+          <i class="fa-solid fa-arrow-down"></i>
+          <span class="summary-label">Entrées</span>
+          <span class="summary-value" id="summaryIn">0.00</span>
+        </div>
+        <div class="summary-sep"><i class="fa-solid fa-minus"></i></div>
+        <div class="summary-pill summary-out">
+          <i class="fa-solid fa-arrow-up"></i>
+          <span class="summary-label">Sorties</span>
+          <span class="summary-value" id="summaryOut">0.00</span>
+        </div>
+        <div class="summary-sep"><i class="fa-solid fa-equals"></i></div>
+        <div class="summary-pill summary-balance" id="summaryBalancePill">
+          <i class="fa-solid fa-scale-balanced"></i>
+          <span class="summary-label">Solde</span>
+          <span class="summary-value" id="summaryBalance">0.00</span>
+        </div>
+        <div class="summary-export">
+          <button class="btn btn-secondary" id="btnExportCSV" style="font-size:.8rem;padding:.4rem .85rem">
+            <i class="fa-solid fa-file-csv"></i> CSV
+          </button>
+          <button class="btn btn-secondary" id="btnExportMonthPDF" style="font-size:.8rem;padding:.4rem .85rem">
+            <i class="fa-solid fa-file-pdf" style="color:#dc2626"></i> PDF
+          </button>
+        </div>
+      </div>
 
+      <!-- ===== BOUTONS D'ACTION ===== -->
+      <div class="compta-actions">
         <button class="compta-btn compta-btn-entree" id="btnEntree">
-          <div class="compta-btn-icon">
-            <i class="fa-solid fa-plus"></i>
-          </div>
+          <div class="compta-btn-icon"><i class="fa-solid fa-plus"></i></div>
           <div class="compta-btn-text">
             <span class="compta-btn-label">Entrée coffre</span>
             <span class="compta-btn-desc">Recharge puce / dépôt liquide</span>
           </div>
           <i class="fa-solid fa-chevron-right compta-btn-arrow"></i>
         </button>
-
         <button class="compta-btn compta-btn-virement" id="btnVirement">
-          <div class="compta-btn-icon">
-            <i class="fa-solid fa-arrow-right-arrow-left"></i>
-          </div>
+          <div class="compta-btn-icon"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
           <div class="compta-btn-text">
             <span class="compta-btn-label">Coffre → Banque</span>
             <span class="compta-btn-desc">Déposer le liquide en banque</span>
           </div>
           <i class="fa-solid fa-chevron-right compta-btn-arrow"></i>
         </button>
-
         <button class="compta-btn compta-btn-sortie" id="btnSortie">
-          <div class="compta-btn-icon">
-            <i class="fa-solid fa-minus"></i>
-          </div>
+          <div class="compta-btn-icon"><i class="fa-solid fa-minus"></i></div>
           <div class="compta-btn-text">
             <span class="compta-btn-label">Sortie banque</span>
             <span class="compta-btn-desc">Payer une facture régie</span>
           </div>
           <i class="fa-solid fa-chevron-right compta-btn-arrow"></i>
         </button>
-
       </div>
 
-      <!-- ===== HISTORIQUE + ARCHIVES ===== -->
+      <!-- ===== HISTORIQUE ===== -->
       <div class="compta-history-wrap">
         <div class="compta-history-header">
           <div class="compta-history-title">
             <i class="fa-solid fa-clock-rotate-left"></i>
             <span>Historique</span>
+            <span class="count-badge" id="txCount" style="background:var(--blue)">0</span>
           </div>
           <div class="compta-header-controls">
-            <!-- Onglets vue -->
             <div class="compta-view-tabs">
               <button class="compta-view-tab active" id="viewTabAll">
                 <i class="fa-solid fa-list"></i> Transactions
@@ -535,7 +569,6 @@
                 <i class="fa-solid fa-folder-open"></i> Archives
               </button>
             </div>
-            <!-- Filtre (vue transactions) -->
             <select id="filterComptaType" class="compta-filter">
               <option value="">Toutes</option>
               <option value="entree">Entrées coffre</option>
@@ -543,7 +576,6 @@
               <option value="sortie">Sorties banque</option>
               <option value="pending">En attente</option>
             </select>
-            <!-- Bouton nouvelle archive (vue archives) -->
             <button class="btn btn-secondary hidden" id="btnCreateArchive" style="padding:.4rem .9rem;font-size:.82rem">
               <i class="fa-solid fa-folder-plus"></i> Nouveau dossier
             </button>

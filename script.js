@@ -1337,6 +1337,7 @@ async function seedDemoData() {
    19. INITIALISATION APRÈS CONNEXION
    ============================================================ */
 async function initApp() {
+  initCurrentMonth();   // initialiser le mois courant
   await loadBuildings();
 
   // ---- Test de sauvegarde au démarrage ----
@@ -1640,245 +1641,169 @@ if (btnExportAll) {
 }
 
 /* ============================================================
-   22. COMPTABILITÉ — Coffre & Compte bancaire
-   Collection Firestore : "transactions"
-   Chaque document : { type, montant, description, date, soldeCoffre, soldeBanque }
-   Types : "entree" | "virement" | "sortie"
+   22. COMPTABILITÉ v2 — Gestion mensuelle
+   Modèle transaction : { id, type, status, montant, tenant,
+     description, date, month, archiveId }
+   month = "YYYY-MM" (ex: "2026-04")
+   Soldes calculés dynamiquement par mois — pas de stockage
    ============================================================ */
 
-let transactions = [];
-let unsubCompta = null;
+let transactions  = [];
+let unsubCompta   = null;
+let currentMonth  = "";   // "YYYY-MM"
 
-/* ---- Démarrer l'écouteur temps réel comptabilité ---- */
-function startComptaListener() {
-  if (unsubCompta) unsubCompta();
-  unsubCompta = col("transactions")
-    .onSnapshot(snap => {
-      // Tri côté client par date décroissante — pas besoin d'index Firestore
-      transactions = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-      renderCompta();
-    }, err => {
-      console.error("compta listener:", err);
-      if (err.code === "permission-denied") {
-        showFirestorePermissionWarning();
-      }
-    });
+/* ---- Initialiser le mois courant ---- */
+function initCurrentMonth() {
+  const now = new Date();
+  currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
 }
 
-/* ---- Calculer les soldes actuels (ignore les entrées en attente) ---- */
-function getSoldes() {
-  // Exclure les transactions en attente du calcul des soldes
+/* ---- Formater le mois en affichage ---- */
+function formatMonthDisplay(ym) {
+  const [y, m] = ym.split("-");
+  const d = new Date(parseInt(y), parseInt(m)-1, 1);
+  const s = d.toLocaleDateString("fr-CH", { month:"long", year:"numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/* ---- Naviguer entre les mois ---- */
+function changeMonth(delta) {
+  const [y, m] = currentMonth.split("-").map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  currentMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  document.getElementById("monthDisplay").textContent = formatMonthDisplay(currentMonth);
+  renderCompta();
+}
+
+document.getElementById("monthPrev").addEventListener("click",  () => changeMonth(-1));
+document.getElementById("monthNext").addEventListener("click",  () => changeMonth(+1));
+document.getElementById("monthToday").addEventListener("click", () => {
+  initCurrentMonth();
+  document.getElementById("monthDisplay").textContent = formatMonthDisplay(currentMonth);
+  renderCompta();
+});
+
+/* ---- Transactions du mois courant ---- */
+function monthTransactions() {
+  return transactions.filter(t => (t.month || t.date?.slice(0,7)) === currentMonth);
+}
+
+/* ---- Calculer les soldes du mois ---- */
+function getMonthSoldes(month) {
+  const list = transactions.filter(t => (t.month || t.date?.slice(0,7)) === month && t.status !== "pending");
+  let coffre = 0, banque = 0;
+  for (const t of list) {
+    if (t.type === "entree")   coffre += t.montant;
+    if (t.type === "virement") { coffre -= t.montant; banque += t.montant; }
+    if (t.type === "sortie")   banque -= t.montant;
+  }
+  return {
+    coffre: Math.round(coffre * 100) / 100,
+    banque: Math.round(banque * 100) / 100
+  };
+}
+
+/* ---- Soldes CUMULATIFS (tous les mois précédents + courant) ---- */
+function getCumulativeSoldes() {
   const confirmed = transactions.filter(t => t.status !== "pending");
-  if (!confirmed.length) return { coffre: 0, banque: 0 };
-  const last = confirmed[0]; // dernier confirmé, trié desc
-  return { coffre: last.soldeCoffre || 0, banque: last.soldeBanque || 0 };
+  let coffre = 0, banque = 0;
+  for (const t of confirmed) {
+    if (t.type === "entree")   coffre += t.montant;
+    if (t.type === "virement") { coffre -= t.montant; banque += t.montant; }
+    if (t.type === "sortie")   banque -= t.montant;
+  }
+  return {
+    coffre: Math.round(coffre * 100) / 100,
+    banque: Math.round(banque * 100) / 100
+  };
 }
 
-/* ---- Formater un montant en CHF ---- */
+/* Alias pour la compatibilité avec les fonctions existantes */
+function getSoldes() { return getCumulativeSoldes(); }
+
+/* ---- Format CHF ---- */
 function chf(n) {
   return parseFloat(n || 0).toFixed(2) + " CHF";
 }
 
-/* ---- Vue active ---- */
-let currentComptaView = "all"; // "all" | "archives"
+/* ---- Écouter les transactions en temps réel ---- */
+function startComptaListener() {
+  if (unsubCompta) unsubCompta();
+  unsubCompta = col("transactions").onSnapshot(snap => {
+    transactions = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Ajouter le champ month si absent
+    transactions.forEach(t => {
+      if (!t.month && t.date) t.month = t.date.slice(0, 7);
+    });
+    renderCompta();
+  }, err => {
+    if (err.code === "permission-denied") showFirestorePermissionWarning();
+  });
+}
 
-/* ---- Rendre l'onglet comptabilité ---- */
+/* ---- Rendu principal de l'onglet ---- */
 function renderCompta() {
-  const { coffre, banque } = getSoldes();
-  document.getElementById("soldeCoffre").textContent = chf(coffre);
-  document.getElementById("soldeBanque").textContent = chf(banque);
-  document.getElementById("soldeTotal").textContent  = chf(coffre + banque);
+  // Navigation mois
+  document.getElementById("monthDisplay").textContent = formatMonthDisplay(currentMonth);
 
-  if (currentComptaView === "archives") {
-    renderArchiveView();
-  } else {
-    renderAllTransactions();
-  }
-}
+  // Soldes du mois courant (pour l'affichage mensuel)
+  const { coffre: coffreMois, banque: banqueMois } = getMonthSoldes(currentMonth);
+  // Soldes cumulatifs (réels)
+  const { coffre: coffreTotal, banque: banqueTotal } = getCumulativeSoldes();
 
-/* ---- Formulaire de saisie d'une transaction ---- */
-function comptaFormHTML(type) {
-  const configs = {
-    entree:   { icon: "fa-arrow-down",             color: "#e8843b", label: "Entrée coffre",   desc: "Recharge puce de lavage / dépôt liquide" },
-    virement: { icon: "fa-arrow-right-arrow-left", color: "#1e5cbf", label: "Coffre → Banque", desc: "Déposer le liquide en banque" },
-    sortie:   { icon: "fa-arrow-up",               color: "#38a169", label: "Sortie banque",   desc: "Payer une facture régie" },
-  };
-  const c = configs[type];
-  const { coffre, banque } = getSoldes();
+  document.getElementById("soldeCoffre").textContent = chf(coffreTotal);
+  document.getElementById("soldeBanque").textContent = chf(banqueTotal);
+  document.getElementById("soldeTotal").textContent  = chf(coffreTotal + banqueTotal);
 
-  return `
-    <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:1.2rem">
-      <i class="fa-solid ${c.icon}" style="color:${c.color};font-size:1.2rem"></i>
-      <div>
-        <div style="font-weight:700;color:var(--navy)">${c.label}</div>
-        <div style="font-size:.8rem;color:var(--text-light)">${c.desc}</div>
-      </div>
-    </div>
-    <div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap">
-      <div style="flex:1;min-width:120px;background:var(--bg);border-radius:var(--radius-sm);padding:.65rem 1rem;text-align:center">
-        <div style="font-size:.7rem;color:var(--text-light);font-weight:700;text-transform:uppercase">Coffre actuel</div>
-        <div style="font-family:'DM Mono',monospace;font-weight:700;color:#c05a1a;font-size:1.1rem;margin-top:.2rem">${chf(coffre)}</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:var(--bg);border-radius:var(--radius-sm);padding:.65rem 1rem;text-align:center">
-        <div style="font-size:.7rem;color:var(--text-light);font-weight:700;text-transform:uppercase">Banque actuelle</div>
-        <div style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blue);font-size:1.1rem;margin-top:.2rem">${chf(banque)}</div>
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Montant (CHF) *</label>
-      <input id="fComptaMontant" type="number" min="0.01" step="0.05" placeholder="Ex : 50.00" style="font-size:1.1rem;font-weight:600"/>
-    </div>
-    <div class="form-group">
-      <label>Description</label>
-      <input id="fComptaDesc" type="text" placeholder="${
-        type === "entree"   ? "Ex : Recharge puce Apt 3A" :
-        type === "virement" ? "Ex : Dépôt coffre → banque" :
-        "Ex : Facture régie mars 2025"
-      }"/>
-    </div>
-    <div class="form-group">
-      <label>Date & heure</label>
-      <input id="fComptaDate" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/>
-    </div>
-    ${type === "entree" ? `
-    <label class="pending-checkbox-wrap" for="fComptaPending">
-      <input type="checkbox" id="fComptaPending"/>
-      <div>
-        <div class="pending-cb-title"><i class="fa-solid fa-clock"></i> En attente</div>
-        <div class="pending-cb-desc">Le locataire paiera plus tard — n'affecte pas le solde du coffre</div>
-      </div>
-    </label>` : ""}`;
-}
+  // Sous-titres des cartes
+  const coffreHint = document.getElementById("soldeCoffreHint");
+  const banqueHint = document.getElementById("soldeBanqueHint");
+  if (coffreHint) coffreHint.textContent = `${coffreMois >= 0 ? "+" : ""}${coffreMois.toFixed(2)} ce mois`;
+  if (banqueHint) banqueHint.textContent = `${banqueMois >= 0 ? "+" : ""}${banqueMois.toFixed(2)} ce mois`;
 
-/* ---- Enregistrer une transaction ---- */
-async function saveTransaction(type) {
-  const montantRaw = parseFloat(document.getElementById("fComptaMontant").value);
-  if (!montantRaw || montantRaw <= 0) {
-    showToast("Le montant doit être supérieur à 0.", "error"); return false;
-  }
-  const montant     = Math.round(montantRaw * 100) / 100;
-  const description = document.getElementById("fComptaDesc").value.trim();
-  const dateVal     = document.getElementById("fComptaDate").value;
-  const date        = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  // Résumé mensuel
+  const monthTx = monthTransactions().filter(t => t.status !== "pending");
+  const totalIn  = monthTx.filter(t => t.type === "entree").reduce((s,t) => s + t.montant, 0);
+  const totalOut = monthTx.filter(t => t.type === "sortie" || t.type === "virement").reduce((s,t) => s + t.montant, 0);
+  const balance  = totalIn - totalOut;
 
-  const { coffre: coffreAct, banque: banqueAct } = getSoldes();
+  document.getElementById("summaryIn").textContent      = totalIn.toFixed(2) + " CHF";
+  document.getElementById("summaryOut").textContent     = totalOut.toFixed(2) + " CHF";
+  document.getElementById("summaryBalance").textContent = (balance >= 0 ? "+" : "") + balance.toFixed(2) + " CHF";
 
-  // Vérifier si l'entrée est "en attente"
-  const pendingEl = document.getElementById("fComptaPending");
-  const isPending = type === "entree" && pendingEl && pendingEl.checked;
-
-  if (isPending) {
-    // Entrée en attente : enregistrée mais ne modifie pas le solde
-    const newDoc = {
-      id: uid(), type: "entree", status: "pending",
-      montant, description, date,
-      soldeCoffre: coffreAct,   // solde inchangé
-      soldeBanque: banqueAct,
-    };
-    await fsAdd("transactions", newDoc);
-    closeModal();
-    showToast(`Entrée en attente enregistrée — ${chf(montant)}`, "info");
-    return true;
+  const balPill = document.getElementById("summaryBalancePill");
+  if (balPill) {
+    balPill.className = "summary-pill " + (balance >= 0 ? "summary-balance-pos" : "summary-balance-neg");
   }
 
-  // Calculer les nouveaux soldes pour une transaction confirmée
-  let newCoffre = coffreAct;
-  let newBanque = banqueAct;
+  // Compteur transactions
+  const countEl = document.getElementById("txCount");
+  if (countEl) countEl.textContent = monthTx.length;
 
-  if (type === "entree") {
-    newCoffre = Math.round((coffreAct + montant) * 100) / 100;
-  } else if (type === "virement") {
-    if (montant > coffreAct) {
-      showToast(`Solde coffre insuffisant (${chf(coffreAct)}).`, "error"); return false;
-    }
-    newCoffre = Math.round((coffreAct - montant) * 100) / 100;
-    newBanque = Math.round((banqueAct + montant) * 100) / 100;
-  } else if (type === "sortie") {
-    if (montant > banqueAct) {
-      showToast(`Solde bancaire insuffisant (${chf(banqueAct)}).`, "error"); return false;
-    }
-    newBanque = Math.round((banqueAct - montant) * 100) / 100;
-  }
-
-  const newDoc = {
-    id: uid(), type, status: "confirmed",
-    montant, description, date,
-    soldeCoffre: newCoffre,
-    soldeBanque: newBanque,
-  };
-
-  await fsAdd("transactions", newDoc);
-  closeModal();
-  showToast("Transaction enregistrée ✓", "success");
-  return true;
+  // Vue courante
+  if (currentComptaView === "archives") renderArchiveView();
+  else renderAllTransactions();
 }
 
-/* ---- Confirmer un paiement en attente ---- */
-async function confirmPendingEntry(id) {
-  const t = transactions.find(t => t.id === id);
-  if (!t || t.status !== "pending") return;
-
-  const { coffre, banque } = getSoldes();
-  const newCoffre = Math.round((coffre + t.montant) * 100) / 100;
-
-  const newDoc = {
-    id: uid(), type: "entree", status: "confirmed",
-    montant: t.montant,
-    description: t.description,
-    date: new Date().toISOString(),
-    soldeCoffre: newCoffre,
-    soldeBanque: banque,
-  };
-
-  await fsAdd("transactions", newDoc);
-  await fsDelete("transactions", id);
-  showToast(`Paiement confirmé ! +${chf(t.montant)} au coffre`, "success");
-}
-
-/* ---- Boutons d'action ---- */
-document.getElementById("btnEntree").addEventListener("click", () => {
-  openModal("Entrée coffre", comptaFormHTML("entree"), async () => {
-    await saveTransaction("entree");
-  });
-});
-document.getElementById("btnVirement").addEventListener("click", () => {
-  openModal("Coffre → Banque", comptaFormHTML("virement"), async () => {
-    await saveTransaction("virement");
-  });
-});
-document.getElementById("btnSortie").addEventListener("click", () => {
-  openModal("Sortie banque", comptaFormHTML("sortie"), async () => {
-    await saveTransaction("sortie");
-  });
-});
-
-/* ---- Filtre ---- */
-document.getElementById("filterComptaType").addEventListener("change", renderCompta);
-
-/* ============================================================
-   23. COMPTABILITÉ — renderAllTransactions (avec "En attente")
-   ============================================================ */
 /* ---- État de la sélection multiple ---- */
 let selectedTxIds = new Set();
+let currentComptaView = "all";
 
 function updateSelectionBar() {
   const bar = document.getElementById("selectionBar");
   if (!bar) return;
   const n = selectedTxIds.size;
-  if (n === 0) {
-    bar.classList.add("hidden");
-  } else {
-    bar.classList.remove("hidden");
-    const label = bar.querySelector(".sel-count");
-    if (label) label.textContent = `${n} transaction${n > 1 ? "s" : ""} sélectionnée${n > 1 ? "s" : ""}`;
-  }
+  bar.classList.toggle("hidden", n === 0);
+  const label = bar.querySelector(".sel-count");
+  if (label) label.textContent = `${n} transaction${n > 1 ? "s" : ""} sélectionnée${n > 1 ? "s" : ""}`;
 }
 
+/* ---- renderAllTransactions ---- */
 function renderAllTransactions() {
   const filterType = document.getElementById("filterComptaType").value;
-  let list = [...transactions];
+  let list = monthTransactions();
 
   if (filterType === "pending") {
     list = list.filter(t => t.status === "pending");
@@ -1887,32 +1812,30 @@ function renderAllTransactions() {
   }
 
   const container = document.getElementById("comptaHistory");
+
   if (!list.length) {
-    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction</p>`;
+    container.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-receipt"></i>Aucune transaction ce mois</p>`;
     selectedTxIds.clear();
     updateSelectionBar();
     return;
   }
 
-  // Bandeau entrées en attente
-  const pendingCount = transactions.filter(t => t.status === "pending").length;
+  const pendingCount = monthTransactions().filter(t => t.status === "pending").length;
   const pendingBanner = pendingCount && filterType !== "pending" ? `
-    <div style="display:flex;align-items:center;gap:.75rem;padding:.65rem 1.25rem;background:#fffbeb;border-bottom:1px solid #fde68a;font-size:.83rem;cursor:pointer"
-         onclick="document.getElementById('filterComptaType').value='pending';renderCompta()">
-      <i class="fa-solid fa-clock" style="color:#d97706"></i>
-      <span style="color:#92400e;font-weight:600">${pendingCount} entrée${pendingCount>1?"s":""} en attente</span>
-      <span style="color:#a16207;margin-left:auto">Voir →</span>
+    <div class="pending-banner" onclick="document.getElementById('filterComptaType').value='pending';renderCompta()">
+      <i class="fa-solid fa-clock"></i>
+      <span>${pendingCount} entrée${pendingCount>1?"s":""} en attente de paiement</span>
+      <span class="pending-banner-link">Voir →</span>
     </div>` : "";
 
   const TYPE_LABELS = {
-    entree:   (s) => s === "pending"
+    entree:   s => s === "pending"
       ? '<span class="tag tag-pending"><i class="fa-solid fa-clock"></i> En attente</span>'
       : '<span class="tag tag-entree">Entrée coffre</span>',
     virement: () => '<span class="tag tag-virement">Coffre → Banque</span>',
     sortie:   () => '<span class="tag tag-sortie">Sortie banque</span>',
   };
 
-  // Tout sélectionner/désélectionner au clic sur le header
   const archivable = list.filter(t => t.status !== "pending");
   const allSelected = archivable.length > 0 && archivable.every(t => selectedTxIds.has(t.id));
 
@@ -1922,49 +1845,58 @@ function renderAllTransactions() {
       <thead>
         <tr>
           <th style="width:36px;text-align:center">
-            <input type="checkbox" id="selectAllTx" title="Tout sélectionner"
-              ${allSelected ? "checked" : ""}
+            <input type="checkbox" id="selectAllTx" ${allSelected?"checked":""}
               style="cursor:pointer;accent-color:var(--blue);width:15px;height:15px"/>
           </th>
-          <th>Date & heure</th>
+          <th>Date</th>
           <th>Type</th>
+          <th>Locataire / Motif</th>
           <th>Description</th>
           <th style="text-align:right">+ Coffre</th>
           <th style="text-align:right">− Coffre</th>
           <th style="text-align:right">− Banque</th>
-          <th style="text-align:right">💰 Coffre</th>
-          <th style="text-align:right">🏦 Banque</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         ${list.map(t => {
-          const isE = t.type === "entree";
-          const isV = t.type === "virement";
-          const isS = t.type === "sortie";
+          const isE = t.type === "entree", isV = t.type === "virement", isS = t.type === "sortie";
           const isPend = t.status === "pending";
           const isSelected = selectedTxIds.has(t.id);
-          const rowClass = [isPend ? "row-pending" : "", isSelected ? "row-selected" : ""].filter(Boolean).join(" ");
           const labelFn = TYPE_LABELS[t.type] || (() => t.type);
           return `
-          <tr class="${rowClass}" data-tx-row="${t.id}">
+          <tr class="${isPend?"row-pending":""} ${isSelected?"row-selected":""}" data-tx-row="${t.id}">
             <td style="text-align:center">
               ${!isPend ? `<input type="checkbox" class="tx-checkbox" data-tx-id="${t.id}"
-                ${isSelected ? "checked" : ""}
-                style="cursor:pointer;accent-color:var(--blue);width:15px;height:15px"/>` : ""}
+                ${isSelected?"checked":""} style="cursor:pointer;accent-color:var(--blue);width:15px;height:15px"/>` : ""}
             </td>
             <td class="td-date">${formatDateFull(t.date)}</td>
             <td>${labelFn(t.status)}</td>
-            <td class="td-desc">${escHtml(t.description || "—")}</td>
-            <td class="amount-col">${isE && !isPend ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : isPend ? `<span style="color:#d97706;font-family:'DM Mono',monospace;font-size:.85rem">(${chf(t.montant)})</span>` : `<span class="amount-dash">—</span>`}</td>
-            <td class="amount-col">${isV ? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
-            <td class="amount-col">${isS ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}</td>
-            <td class="mini-solde mini-coffre">${isPend ? '<span style="color:var(--text-light);font-size:.75rem">—</span>' : chf(t.soldeCoffre)}</td>
-            <td class="mini-solde mini-banque">${isPend ? '<span style="color:var(--text-light);font-size:.75rem">—</span>' : chf(t.soldeBanque)}</td>
+            <td class="td-desc" style="font-weight:600;color:var(--navy)">
+              ${escHtml(t.tenant || t.motif || "—")}
+            </td>
+            <td class="td-desc" style="color:var(--text-light);font-weight:400;font-size:.82rem">
+              ${escHtml(t.description || "")}
+            </td>
+            <td class="amount-col">
+              ${isE && !isPend ? `<span class="amount-entree-val">+${chf(t.montant)}</span>`
+                : isPend ? `<span style="color:#d97706;font-family:'DM Mono',monospace">(${chf(t.montant)})</span>`
+                : `<span class="amount-dash">—</span>`}
+            </td>
+            <td class="amount-col">
+              ${isV ? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}
+            </td>
+            <td class="amount-col">
+              ${isS ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : `<span class="amount-dash">—</span>`}
+            </td>
             <td>
-              <div style="display:flex;gap:.3rem;align-items:center;flex-wrap:nowrap">
-                ${isPend ? `<button class="confirm-pay-btn" data-confirm-id="${t.id}"><i class="fa-solid fa-check"></i> Confirmer</button>` : ""}
-                <button class="btn-icon delete" data-compta-id="${t.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+              <div style="display:flex;gap:.3rem;align-items:center">
+                ${isPend ? `<button class="confirm-pay-btn" data-confirm-id="${t.id}">
+                  <i class="fa-solid fa-check"></i> Confirmer
+                </button>` : ""}
+                <button class="btn-icon delete" data-compta-id="${t.id}" title="Supprimer">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
               </div>
             </td>
           </tr>`;
@@ -1973,36 +1905,26 @@ function renderAllTransactions() {
     </table>
     </div>`;
 
-  // Checkbox "tout sélectionner"
+  // Checkbox tout sélectionner
   const selectAll = container.querySelector("#selectAllTx");
   if (selectAll) {
     selectAll.addEventListener("change", () => {
-      if (selectAll.checked) {
-        archivable.forEach(t => selectedTxIds.add(t.id));
-      } else {
-        archivable.forEach(t => selectedTxIds.delete(t.id));
-      }
+      archivable.forEach(t => selectAll.checked ? selectedTxIds.add(t.id) : selectedTxIds.delete(t.id));
       updateSelectionBar();
-      renderAllTransactions(); // re-render pour cocher/décocher
+      renderAllTransactions();
     });
   }
 
-  // Checkboxes individuelles
   container.querySelectorAll(".tx-checkbox").forEach(cb => {
     cb.addEventListener("change", () => {
-      if (cb.checked) selectedTxIds.add(cb.dataset.txId);
-      else            selectedTxIds.delete(cb.dataset.txId);
-      updateSelectionBar();
-      // Mettre à jour le fond de la ligne sans re-render complet
+      cb.checked ? selectedTxIds.add(cb.dataset.txId) : selectedTxIds.delete(cb.dataset.txId);
       const row = container.querySelector(`[data-tx-row="${cb.dataset.txId}"]`);
       if (row) row.classList.toggle("row-selected", cb.checked);
-      // Mettre à jour "tout sélectionner"
-      const newAll = archivable.every(t => selectedTxIds.has(t.id));
-      if (selectAll) selectAll.checked = newAll;
+      updateSelectionBar();
+      if (selectAll) selectAll.checked = archivable.every(t => selectedTxIds.has(t.id));
     });
   });
 
-  // Confirmer paiement en attente
   container.querySelectorAll("[data-confirm-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("Confirmer la réception de ce paiement ?")) return;
@@ -2010,7 +1932,6 @@ function renderAllTransactions() {
     });
   });
 
-  // Supprimer
   container.querySelectorAll("[data-compta-id]").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("Supprimer cette transaction ?")) return;
@@ -2024,209 +1945,157 @@ function renderAllTransactions() {
   updateSelectionBar();
 }
 
-/* ============================================================
-   24. ARCHIVES — Dossiers de transactions
-   Collection Firestore : "archives"
-   ============================================================ */
-let archives     = [];
-let unsubArchives = null;
-
-function startArchiveListener() {
-  if (unsubArchives) unsubArchives();
-  unsubArchives = col("archives").onSnapshot(snap => {
-    archives = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    if (currentComptaView === "archives") renderArchiveView();
-  }, err => { if (err.code === "permission-denied") showFirestorePermissionWarning(); });
+/* ---- Confirmer un paiement en attente ---- */
+async function confirmPendingEntry(id) {
+  const t = transactions.find(t => t.id === id);
+  if (!t || t.status !== "pending") return;
+  const confirmed = { ...t, id: uid(), status: "confirmed", date: new Date().toISOString() };
+  confirmed.month = confirmed.date.slice(0, 7);
+  await fsAdd("transactions", confirmed);
+  await fsDelete("transactions", id);
+  showToast(`Paiement confirmé ! +${chf(t.montant)}`, "success");
 }
 
-/* ---- Formulaire de création d'archive ---- */
-function archiveFormHTML(a = {}) {
-  const today = new Date().toISOString().split("T")[0];
+/* ---- Formulaire transaction ---- */
+function comptaFormHTML(type) {
+  const today = new Date().toISOString().slice(0, 16);
+  const { coffre, banque } = getCumulativeSoldes();
+
+  const configs = {
+    entree:   { color:"#e8843b", icon:"fa-plus",                   label:"Entrée coffre",   desc:"Recharge puce / dépôt liquide" },
+    virement: { color:"#1e5cbf", icon:"fa-arrow-right-arrow-left", label:"Coffre → Banque", desc:"Déposer le liquide en banque" },
+    sortie:   { color:"#38a169", icon:"fa-minus",                  label:"Sortie banque",   desc:"Payer une facture régie" },
+  };
+  const c = configs[type];
+
   return `
-    <div class="form-group">
-      <label>Nom du dossier *</label>
-      <input id="fArchiveName" type="text"
-             placeholder="Ex : Factures 17.04 - 30.04.2026"
-             value="${escHtml(a.name || "")}"/>
+    <div class="compta-form-header" style="border-left:4px solid ${c.color}">
+      <i class="fa-solid ${c.icon}" style="color:${c.color};font-size:1.1rem"></i>
+      <div>
+        <div style="font-weight:700;color:var(--navy)">${c.label}</div>
+        <div style="font-size:.78rem;color:var(--text-light)">${c.desc}</div>
+      </div>
     </div>
+
+    <div class="compta-solde-row">
+      <div class="compta-solde-mini">
+        <div class="csm-label">Coffre actuel</div>
+        <div class="csm-value csm-orange">${chf(coffre)}</div>
+      </div>
+      <div class="compta-solde-mini">
+        <div class="csm-label">Banque actuelle</div>
+        <div class="csm-value csm-blue">${chf(banque)}</div>
+      </div>
+    </div>
+
+    ${type === "entree" ? `
+    <div class="form-group">
+      <label>Nom du locataire *</label>
+      <input id="fTenant" type="text" placeholder="Ex : Marie Dupont, Apt 4B"/>
+    </div>` : ""}
+
+    ${type === "sortie" ? `
+    <div class="form-group">
+      <label>Motif / Régie *</label>
+      <input id="fMotif" type="text" placeholder="Ex : Facture régie avril 2026"/>
+    </div>` : ""}
+
+    ${type === "virement" ? `
+    <div class="form-group">
+      <label>Description</label>
+      <input id="fMotif" type="text" placeholder="Ex : Dépôt coffre → banque" value="Transfert coffre → banque"/>
+    </div>` : ""}
+
     <div class="form-row">
       <div class="form-group">
-        <label>Date de début</label>
-        <input id="fArchiveStart" type="date" value="${a.dateStart || today}"/>
+        <label>Montant (CHF) *</label>
+        <input id="fComptaMontant" type="number" min="0.01" step="0.05"
+               placeholder="0.00" style="font-size:1.1rem;font-weight:700"/>
       </div>
       <div class="form-group">
-        <label>Date de fin</label>
-        <input id="fArchiveEnd" type="date" value="${a.dateEnd || today}"/>
+        <label>Date & heure</label>
+        <input id="fComptaDate" type="datetime-local" value="${today}"/>
       </div>
     </div>
+
     <div class="form-group">
-      <label>Description (optionnel)</label>
-      <input id="fArchiveDesc" type="text"
-             placeholder="Période, remarques…"
-             value="${escHtml(a.description || "")}"/>
-    </div>`;
+      <label>Notes <span style="color:var(--text-light);font-weight:400">(optionnel)</span></label>
+      <input id="fComptaDesc" type="text" placeholder="Remarques supplémentaires…"/>
+    </div>
+
+    ${type === "entree" ? `
+    <label class="pending-checkbox-wrap" for="fComptaPending">
+      <input type="checkbox" id="fComptaPending"/>
+      <div>
+        <div class="pending-cb-title"><i class="fa-solid fa-clock"></i> En attente</div>
+        <div class="pending-cb-desc">Le locataire paiera plus tard — n'affecte pas le solde</div>
+      </div>
+    </label>` : ""}`;
 }
 
-/* ---- Vue Archives ---- */
-function renderArchiveView() {
-  const container = document.getElementById("comptaHistory");
+/* ---- Sauvegarder une transaction ---- */
+async function saveTransaction(type) {
+  const montantRaw = parseFloat(document.getElementById("fComptaMontant")?.value);
+  if (!montantRaw || montantRaw <= 0) {
+    showToast("Le montant doit être supérieur à 0.", "error"); return false;
+  }
+  const montant = Math.round(montantRaw * 100) / 100;
 
-  if (!archives.length) {
-    container.innerHTML = `
-      <div class="archives-empty">
-        <i class="fa-solid fa-folder-open"></i>
-        Aucun dossier d'archive.<br>
-        <span style="font-size:.82rem">Crée un dossier pour regrouper tes transactions par période.</span>
-      </div>`;
-    return;
+  const dateVal = document.getElementById("fComptaDate")?.value;
+  const date    = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+  const month   = date.slice(0, 7);
+
+  const description = document.getElementById("fComptaDesc")?.value.trim() || "";
+  const tenant  = document.getElementById("fTenant")?.value.trim() || "";
+  const motif   = document.getElementById("fMotif")?.value.trim() || "";
+  const pending = document.getElementById("fComptaPending")?.checked || false;
+
+  // Validation
+  if (type === "entree" && !pending && !tenant) {
+    showToast("Le nom du locataire est obligatoire.", "error"); return false;
+  }
+  if ((type === "sortie" || type === "virement") && !motif && type === "sortie") {
+    showToast("Le motif est obligatoire.", "error"); return false;
   }
 
-  const TYPE_LABELS = {
-    entree:   '<span class="tag tag-entree" style="font-size:.68rem">Entrée</span>',
-    virement: '<span class="tag tag-virement" style="font-size:.68rem">Virement</span>',
-    sortie:   '<span class="tag tag-sortie" style="font-size:.68rem">Sortie</span>',
+  // Vérification soldes
+  const { coffre, banque } = getCumulativeSoldes();
+  if (type === "virement" && montant > coffre) {
+    showToast(`Solde coffre insuffisant (${chf(coffre)}).`, "error"); return false;
+  }
+  if (type === "sortie" && montant > banque) {
+    showToast(`Solde bancaire insuffisant (${chf(banque)}).`, "error"); return false;
+  }
+
+  const newDoc = {
+    id: uid(), type,
+    status: (type === "entree" && pending) ? "pending" : "confirmed",
+    montant, date, month, description,
+    ...(tenant ? { tenant } : {}),
+    ...(motif  ? { motif  } : {}),
   };
 
-  // Construire le HTML de chaque dossier
-  container.innerHTML = archives.map(arch => {
-    const archTx = transactions.filter(t => t.archiveId === arch.id && t.status !== "pending");
-    const totalIn  = archTx.filter(t => t.type === "entree").reduce((s,t) => s + t.montant, 0);
-    const totalOut = archTx.filter(t => t.type === "sortie" || t.type === "virement").reduce((s,t) => s + t.montant, 0);
-    const txRows = archTx.length ? `
-      <div style="overflow-x:auto">
-      <table class="compta-table">
-        <thead>
-          <tr>
-            <th>Date</th><th>Type</th><th>Description</th>
-            <th style="text-align:right">Montant</th>
-            <th style="text-align:right">💰 Coffre</th>
-            <th style="text-align:right">🏦 Banque</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${archTx.map(t => `
-            <tr>
-              <td class="td-date">${formatDateFull(t.date)}</td>
-              <td>${TYPE_LABELS[t.type] || ""}</td>
-              <td class="td-desc">${escHtml(t.description||"—")}</td>
-              <td class="amount-col">
-                ${t.type==="entree"  ? `<span class="amount-entree-val">+${chf(t.montant)}</span>` : ""}
-                ${t.type==="sortie"  ? `<span class="amount-sortie-val">−${chf(t.montant)}</span>` : ""}
-                ${t.type==="virement"? `<span class="amount-virement-val">−${chf(t.montant)}</span>` : ""}
-              </td>
-              <td class="mini-solde mini-coffre">${chf(t.soldeCoffre)}</td>
-              <td class="mini-solde mini-banque">${chf(t.soldeBanque)}</td>
-              <td>
-                <button class="btn-icon delete" data-remove-from-archive="${t.id}" title="Retirer du dossier">
-                  <i class="fa-solid fa-folder-minus"></i>
-                </button>
-              </td>
-            </tr>`).join("")}
-        </tbody>
-      </table>
-      </div>` : `<p class="empty-msg" style="padding:1.2rem"><i class="fa-solid fa-inbox"></i>Aucune transaction dans ce dossier</p>`;
-
-    return `
-      <div class="archive-folder" data-archive-id="${arch.id}">
-        <div class="archive-folder-header" data-toggle="${arch.id}">
-          <div class="archive-folder-icon" id="arch-icon-${arch.id}">
-            <i class="fa-solid fa-folder"></i>
-          </div>
-          <div class="archive-folder-info">
-            <div class="archive-folder-name">${escHtml(arch.name)}</div>
-            <div class="archive-folder-meta">
-              ${arch.dateStart ? `<span>📅 ${formatDate(arch.dateStart)} → ${formatDate(arch.dateEnd || arch.dateStart)}</span>` : ""}
-              <span>${archTx.length} transaction${archTx.length!==1?"s":""}</span>
-              ${totalIn  ? `<span class="archive-stat-in">+${chf(totalIn)}</span>` : ""}
-              ${totalOut ? `<span class="archive-stat-out">−${chf(totalOut)}</span>` : ""}
-            </div>
-          </div>
-          <div class="archive-folder-right">
-            <button class="btn-icon delete" data-delete-archive="${arch.id}" title="Supprimer le dossier">
-              <i class="fa-solid fa-trash"></i>
-            </button>
-            <i class="fa-solid fa-chevron-down archive-chevron" id="arch-chev-${arch.id}"></i>
-          </div>
-        </div>
-        <div class="archive-folder-body" id="arch-body-${arch.id}">
-          ${txRows}
-          <!-- Ajouter des transactions non archivées -->
-          <div style="padding:.75rem 1.25rem;border-top:1px solid var(--border);background:var(--white)">
-            <select id="arch-add-select-${arch.id}" class="compta-filter" style="margin-right:.5rem;min-width:220px">
-              <option value="">Ajouter une transaction à ce dossier…</option>
-              ${transactions.filter(t => !t.archiveId && t.status !== "pending").map(t =>
-                `<option value="${t.id}">${formatDateFull(t.date)} — ${escHtml(t.description||t.type)} (${chf(t.montant)})</option>`
-              ).join("")}
-            </select>
-            <button class="btn btn-secondary" data-add-to-archive="${arch.id}" style="padding:.35rem .75rem;font-size:.8rem">
-              <i class="fa-solid fa-plus"></i> Ajouter
-            </button>
-          </div>
-        </div>
-      </div>`;
-  }).join("");
-
-  // Toggle ouverture dossier
-  container.querySelectorAll("[data-toggle]").forEach(el => {
-    el.addEventListener("click", e => {
-      if (e.target.closest("[data-delete-archive]")) return;
-      const id = el.dataset.toggle;
-      const body = document.getElementById(`arch-body-${id}`);
-      const icon = document.getElementById(`arch-icon-${id}`);
-      const chev = document.getElementById(`arch-chev-${id}`);
-      body.classList.toggle("open");
-      chev.classList.toggle("open");
-      icon.classList.toggle("open");
-      if (body.classList.contains("open")) {
-        icon.innerHTML = '<i class="fa-solid fa-folder-open"></i>';
-      } else {
-        icon.innerHTML = '<i class="fa-solid fa-folder"></i>';
-      }
-    });
-  });
-
-  // Supprimer un dossier
-  container.querySelectorAll("[data-delete-archive]").forEach(btn => {
-    btn.addEventListener("click", async e => {
-      e.stopPropagation();
-      if (!confirm("Supprimer ce dossier ?\nLes transactions ne seront pas supprimées.")) return;
-      // Retirer l'archiveId de toutes les transactions du dossier
-      const archId = btn.dataset.deleteArchive;
-      const archTx = transactions.filter(t => t.archiveId === archId);
-      await Promise.all(archTx.map(t => fsUpdate("transactions", t.id, { ...t, archiveId: null })));
-      await fsDelete("archives", archId);
-      showToast("Dossier supprimé.", "info");
-    });
-  });
-
-  // Retirer une transaction d'un dossier
-  container.querySelectorAll("[data-remove-from-archive]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const t = transactions.find(t => t.id === btn.dataset.removeFromArchive);
-      if (!t) return;
-      await fsUpdate("transactions", t.id, { ...t, archiveId: null });
-      showToast("Transaction retirée du dossier.", "info");
-    });
-  });
-
-  // Ajouter une transaction à un dossier
-  container.querySelectorAll("[data-add-to-archive]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const archId  = btn.dataset.addToArchive;
-      const selectEl = document.getElementById(`arch-add-select-${archId}`);
-      const txId    = selectEl.value;
-      if (!txId) { showToast("Sélectionne une transaction.", "info"); return; }
-      const t = transactions.find(t => t.id === txId);
-      if (!t) return;
-      await fsUpdate("transactions", t.id, { ...t, archiveId: archId });
-      showToast("Transaction ajoutée au dossier !", "success");
-    });
-  });
+  await fsAdd("transactions", newDoc);
+  closeModal();
+  showToast(pending ? `Entrée en attente enregistrée — ${chf(montant)}` : "Transaction enregistrée ✓", pending ? "info" : "success");
+  return true;
 }
 
-/* ---- Boutons onglets vue ---- */
+/* ---- Boutons d'action ---- */
+document.getElementById("btnEntree").addEventListener("click", () => {
+  openModal("Entrée coffre", comptaFormHTML("entree"), async () => { await saveTransaction("entree"); });
+});
+document.getElementById("btnVirement").addEventListener("click", () => {
+  openModal("Coffre → Banque", comptaFormHTML("virement"), async () => { await saveTransaction("virement"); });
+});
+document.getElementById("btnSortie").addEventListener("click", () => {
+  openModal("Sortie banque", comptaFormHTML("sortie"), async () => { await saveTransaction("sortie"); });
+});
+
+/* ---- Filtre ---- */
+document.getElementById("filterComptaType").addEventListener("change", renderCompta);
+
+/* ---- Onglets vue ---- */
 document.getElementById("viewTabAll").addEventListener("click", () => {
   currentComptaView = "all";
   document.getElementById("viewTabAll").classList.add("active");
@@ -2244,79 +2113,307 @@ document.getElementById("viewTabArchives").addEventListener("click", () => {
   renderCompta();
 });
 
-/* ---- Créer un dossier ---- */
+/* ---- Archives ---- */
+let archives      = [];
+let unsubArchives = null;
+
+function startArchiveListener() {
+  if (unsubArchives) unsubArchives();
+  unsubArchives = col("archives").onSnapshot(snap => {
+    archives = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (currentComptaView === "archives") renderArchiveView();
+  }, err => { if (err.code === "permission-denied") showFirestorePermissionWarning(); });
+}
+
+function archiveFormHTML(a = {}) {
+  const today = new Date().toISOString().split("T")[0];
+  return `
+    <div class="form-group">
+      <label>Nom du dossier *</label>
+      <input id="fArchiveName" type="text" placeholder="Ex : Factures Avril 2026" value="${escHtml(a.name||"")}"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date de début</label>
+        <input id="fArchiveStart" type="date" value="${a.dateStart||today}"/>
+      </div>
+      <div class="form-group">
+        <label>Date de fin</label>
+        <input id="fArchiveEnd" type="date" value="${a.dateEnd||today}"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input id="fArchiveDesc" type="text" placeholder="Période, remarques…" value="${escHtml(a.description||"")}"/>
+    </div>`;
+}
+
+function renderArchiveView() {
+  const container = document.getElementById("comptaHistory");
+  if (!archives.length) {
+    container.innerHTML = `<div class="archives-empty"><i class="fa-solid fa-folder-open"></i>Aucun dossier d'archive.<br><span style="font-size:.82rem">Crée un dossier pour regrouper tes transactions.</span></div>`;
+    return;
+  }
+
+  const TYPE_LABELS = {
+    entree:   '<span class="tag tag-entree" style="font-size:.68rem">Entrée</span>',
+    virement: '<span class="tag tag-virement" style="font-size:.68rem">Virement</span>',
+    sortie:   '<span class="tag tag-sortie" style="font-size:.68rem">Sortie</span>',
+  };
+
+  container.innerHTML = archives.map(arch => {
+    const archTx  = transactions.filter(t => t.archiveId === arch.id && t.status !== "pending");
+    const totalIn  = archTx.filter(t => t.type==="entree").reduce((s,t)=>s+t.montant,0);
+    const totalOut = archTx.filter(t => t.type==="sortie"||t.type==="virement").reduce((s,t)=>s+t.montant,0);
+
+    const txRows = archTx.length ? `
+      <div style="overflow-x:auto">
+      <table class="compta-table">
+        <thead><tr>
+          <th>Date</th><th>Type</th><th>Locataire / Motif</th>
+          <th style="text-align:right">Montant</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${archTx.map(t => `
+          <tr>
+            <td class="td-date">${formatDateFull(t.date)}</td>
+            <td>${TYPE_LABELS[t.type]||""}</td>
+            <td class="td-desc">${escHtml(t.tenant||t.motif||t.description||"—")}</td>
+            <td class="amount-col">
+              ${t.type==="entree"  ?`<span class="amount-entree-val">+${chf(t.montant)}</span>`:""}
+              ${t.type==="sortie"  ?`<span class="amount-sortie-val">−${chf(t.montant)}</span>`:""}
+              ${t.type==="virement"?`<span class="amount-virement-val">−${chf(t.montant)}</span>`:""}
+            </td>
+            <td>
+              <button class="btn-icon delete" data-remove-from-archive="${t.id}" title="Retirer">
+                <i class="fa-solid fa-folder-minus"></i>
+              </button>
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      </div>` : `<p class="empty-msg" style="padding:1rem"><i class="fa-solid fa-inbox"></i>Aucune transaction</p>`;
+
+    return `
+      <div class="archive-folder" data-archive-id="${arch.id}">
+        <div class="archive-folder-header" data-toggle="${arch.id}">
+          <div class="archive-folder-icon" id="arch-icon-${arch.id}"><i class="fa-solid fa-folder"></i></div>
+          <div class="archive-folder-info">
+            <div class="archive-folder-name">${escHtml(arch.name)}</div>
+            <div class="archive-folder-meta">
+              ${arch.dateStart?`<span>📅 ${formatDate(arch.dateStart)} → ${formatDate(arch.dateEnd||arch.dateStart)}</span>`:""}
+              <span>${archTx.length} transaction${archTx.length!==1?"s":""}</span>
+              ${totalIn ?`<span class="archive-stat-in">+${chf(totalIn)}</span>`:""}
+              ${totalOut?`<span class="archive-stat-out">−${chf(totalOut)}</span>`:""}
+            </div>
+          </div>
+          <div class="archive-folder-right">
+            <button class="btn-icon delete" data-delete-archive="${arch.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+            <i class="fa-solid fa-chevron-down archive-chevron" id="arch-chev-${arch.id}"></i>
+          </div>
+        </div>
+        <div class="archive-folder-body" id="arch-body-${arch.id}">
+          ${txRows}
+          <div style="padding:.75rem 1.25rem;border-top:1px solid var(--border);background:var(--white);display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+            <select id="arch-add-select-${arch.id}" class="compta-filter" style="flex:1;min-width:200px">
+              <option value="">Ajouter une transaction à ce dossier…</option>
+              ${transactions.filter(t=>!t.archiveId&&t.status!=="pending").map(t=>
+                `<option value="${t.id}">${formatDateFull(t.date)} — ${escHtml(t.tenant||t.motif||t.description||t.type)} (${chf(t.montant)})</option>`
+              ).join("")}
+            </select>
+            <button class="btn btn-secondary" data-add-to-archive="${arch.id}" style="padding:.35rem .75rem;font-size:.8rem">
+              <i class="fa-solid fa-plus"></i> Ajouter
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  container.querySelectorAll("[data-toggle]").forEach(el => {
+    el.addEventListener("click", e => {
+      if (e.target.closest("[data-delete-archive]")) return;
+      const id   = el.dataset.toggle;
+      const body = document.getElementById(`arch-body-${id}`);
+      const icon = document.getElementById(`arch-icon-${id}`);
+      const chev = document.getElementById(`arch-chev-${id}`);
+      body.classList.toggle("open"); chev.classList.toggle("open");
+      icon.innerHTML = body.classList.contains("open") ? '<i class="fa-solid fa-folder-open"></i>' : '<i class="fa-solid fa-folder"></i>';
+    });
+  });
+
+  container.querySelectorAll("[data-delete-archive]").forEach(btn => {
+    btn.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!confirm("Supprimer ce dossier ?")) return;
+      const archId = btn.dataset.deleteArchive;
+      const archTx = transactions.filter(t => t.archiveId === archId);
+      await Promise.all(archTx.map(t => fsUpdate("transactions", t.id, { ...t, archiveId: null })));
+      await fsDelete("archives", archId);
+      showToast("Dossier supprimé.", "info");
+    });
+  });
+
+  container.querySelectorAll("[data-remove-from-archive]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const t = transactions.find(t => t.id === btn.dataset.removeFromArchive);
+      if (t) await fsUpdate("transactions", t.id, { ...t, archiveId: null });
+      showToast("Retirée du dossier.", "info");
+    });
+  });
+
+  container.querySelectorAll("[data-add-to-archive]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const archId = btn.dataset.addToArchive;
+      const sel    = document.getElementById(`arch-add-select-${archId}`);
+      const txId   = sel?.value;
+      if (!txId) { showToast("Sélectionne une transaction.", "info"); return; }
+      const t = transactions.find(t => t.id === txId);
+      if (t) await fsUpdate("transactions", t.id, { ...t, archiveId: archId });
+      showToast("Ajoutée au dossier !", "success");
+    });
+  });
+}
+
 document.getElementById("btnCreateArchive").addEventListener("click", () => {
   openModal("Nouveau dossier d'archive", archiveFormHTML(), async () => {
     const name = mval("fArchiveName");
     if (!name) { showToast("Le nom est obligatoire.", "error"); return; }
-    await fsAdd("archives", {
-      id: uid(), name,
-      dateStart:   mval("fArchiveStart"),
-      dateEnd:     mval("fArchiveEnd"),
-      description: mval("fArchiveDesc"),
-      createdAt:   new Date().toISOString(),
-    });
+    await fsAdd("archives", { id:uid(), name, dateStart:mval("fArchiveStart"), dateEnd:mval("fArchiveEnd"), description:mval("fArchiveDesc"), createdAt:new Date().toISOString() });
     closeModal();
     showToast(`Dossier "${name}" créé !`, "success");
   });
 });
 
-/* ---- Bouton "Archiver la sélection" ---- */
+/* ---- Archiver la sélection ---- */
 document.getElementById("btnArchiveSelected").addEventListener("click", () => {
-  if (selectedTxIds.size === 0) return;
-  if (!archives.length) {
-    showToast("Crée d'abord un dossier dans l'onglet Archives.", "info");
-    return;
-  }
-
+  if (!selectedTxIds.size) return;
+  if (!archives.length) { showToast("Crée d'abord un dossier dans l'onglet Archives.", "info"); return; }
   const n = selectedTxIds.size;
-  const archiveOptions = archives.map(a =>
-    `<option value="${a.id}">${escHtml(a.name)}</option>`
-  ).join("");
-
-  openModal(
-    `Archiver ${n} transaction${n > 1 ? "s" : ""}`,
+  openModal(`Archiver ${n} transaction${n>1?"s":""}`,
     `<div class="form-group">
-       <label>Choisir le dossier de destination *</label>
-       <select id="fBulkArchive" style="font-size:.95rem">
-         <option value="">— Sélectionner un dossier —</option>
-         ${archiveOptions}
+       <label>Dossier de destination *</label>
+       <select id="fBulkArchive">
+         <option value="">— Sélectionner —</option>
+         ${archives.map(a=>`<option value="${a.id}">${escHtml(a.name)}</option>`).join("")}
        </select>
      </div>
      <p style="font-size:.82rem;color:var(--text-light);margin-top:.5rem">
-       <i class="fa-solid fa-circle-info" style="color:var(--blue)"></i>
-       ${n} transaction${n > 1 ? "s" : ""} seront ajoutée${n > 1 ? "s" : ""} au dossier sélectionné.
+       ${n} transaction${n>1?"s":""} seront ajoutée${n>1?"s":""} au dossier.
      </p>`,
     async () => {
-      const archiveId = document.getElementById("fBulkArchive").value;
+      const archiveId = document.getElementById("fBulkArchive")?.value;
       if (!archiveId) { showToast("Sélectionne un dossier.", "error"); return; }
-
-      const ids = [...selectedTxIds];
-      showToast("Archivage en cours…", "info");
-
-      // Mise à jour en parallèle
-      await Promise.all(ids.map(id => {
+      await Promise.all([...selectedTxIds].map(id => {
         const t = transactions.find(t => t.id === id);
-        if (t) return fsUpdate("transactions", id, { ...t, archiveId });
-        return Promise.resolve();
+        return t ? fsUpdate("transactions", id, { ...t, archiveId }) : Promise.resolve();
       }));
-
       const archName = archives.find(a => a.id === archiveId)?.name || "le dossier";
-      selectedTxIds.clear();
-      updateSelectionBar();
+      selectedTxIds.clear(); updateSelectionBar();
       closeModal();
-      showToast(`${ids.length} transaction${ids.length > 1 ? "s" : ""} archivée${ids.length > 1 ? "s" : ""} dans "${archName}" ✓`, "success");
-    }
-  );
+      showToast(`${[...selectedTxIds].length || n} transactions archivées dans "${archName}" ✓`, "success");
+    });
 });
 
-/* ---- Bouton annuler la sélection ---- */
 document.getElementById("btnClearSelection").addEventListener("click", () => {
-  selectedTxIds.clear();
-  updateSelectionBar();
-  renderAllTransactions();
+  selectedTxIds.clear(); updateSelectionBar(); renderAllTransactions();
+});
+
+/* ---- Export CSV ---- */
+document.getElementById("btnExportCSV").addEventListener("click", () => {
+  const list = monthTransactions().filter(t => t.status !== "pending");
+  if (!list.length) { showToast("Aucune transaction à exporter.", "info"); return; }
+
+  const headers = ["Date","Type","Locataire / Motif","Description","Entrée coffre CHF","Sortie coffre CHF","Sortie banque CHF"];
+  const rows = list.map(t => [
+    formatDateFull(t.date),
+    t.type === "entree" ? "Entrée coffre" : t.type === "virement" ? "Coffre→Banque" : "Sortie banque",
+    t.tenant || t.motif || "",
+    t.description || "",
+    t.type === "entree"   ? t.montant.toFixed(2) : "",
+    t.type === "virement" ? t.montant.toFixed(2) : "",
+    t.type === "sortie"   ? t.montant.toFixed(2) : "",
+  ]);
+
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `ImmoGest_${formatMonthDisplay(currentMonth).replace(/ /g,"_")}.csv`;
+  a.click();
+  showToast("Export CSV téléchargé !", "success");
+});
+
+/* ---- Export PDF mensuel ---- */
+document.getElementById("btnExportMonthPDF").addEventListener("click", async () => {
+  const list = monthTransactions().filter(t => t.status !== "pending");
+  if (!list.length) { showToast("Aucune transaction à exporter.", "info"); return; }
+  if (typeof window.jspdf === "undefined") { showToast("PDF en cours de chargement, réessaie.", "info"); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
+  const NAVY=[26,38,64], BLUE=[30,92,191], ORANGE=[232,106,26], LGRAY=[240,243,251];
+  const PAGE_W=297, M=15, TODAY=new Date().toLocaleDateString("fr-CH");
+  const MONTH_LABEL = formatMonthDisplay(currentMonth);
+
+  // Header
+  doc.setFillColor(...NAVY); doc.rect(0,0,PAGE_W,30,"F");
+  doc.setFillColor(...ORANGE); doc.rect(0,30,PAGE_W,2,"F");
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
+  doc.text("ImmoGest — Rapport mensuel", M, 14);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(160,180,220);
+  doc.text(MONTH_LABEL, M, 22);
+  doc.setTextColor(255,255,255); doc.text(`Généré le ${TODAY}`, PAGE_W-M, 22, {align:"right"});
+
+  // Résumé
+  const { coffre, banque } = getCumulativeSoldes();
+  const totalIn  = list.filter(t=>t.type==="entree").reduce((s,t)=>s+t.montant,0);
+  const totalOut = list.filter(t=>t.type==="sortie"||t.type==="virement").reduce((s,t)=>s+t.montant,0);
+  let y = 42;
+  const pills = [
+    {l:"Coffre liquide", v:chf(coffre), c:ORANGE},
+    {l:"Compte bancaire",v:chf(banque), c:BLUE},
+    {l:"Entrées mois",   v:"+"+chf(totalIn),  c:[40,120,80]},
+    {l:"Sorties mois",   v:"−"+chf(totalOut), c:[180,40,40]},
+  ];
+  pills.forEach((p,i) => {
+    const x = M + i*(PAGE_W-2*M)/4;
+    doc.setFillColor(...LGRAY); doc.roundedRect(x,y,60,18,2,2,"F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(100,116,148);
+    doc.text(p.l, x+5, y+6);
+    doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(...p.c);
+    doc.text(p.v, x+5, y+14);
+  });
+
+  // Tableau
+  doc.autoTable({
+    startY: y+25, margin:{left:M,right:M},
+    head:[["Date","Type","Locataire / Motif","Description","+ Coffre","− Coffre","− Banque"]],
+    body: list.map(t=>[
+      formatDateFull(t.date),
+      t.type==="entree"?"Entrée coffre":t.type==="virement"?"Coffre→Banque":"Sortie banque",
+      t.tenant||t.motif||"—",
+      t.description||"",
+      t.type==="entree"  ?"+"+chf(t.montant):"—",
+      t.type==="virement"?"−"+chf(t.montant):"—",
+      t.type==="sortie"  ?"−"+chf(t.montant):"—",
+    ]),
+    styles:{font:"helvetica",fontSize:8,cellPadding:3,textColor:[...NAVY]},
+    headStyles:{fillColor:[...BLUE],textColor:[255,255,255],fontStyle:"bold"},
+    alternateRowStyles:{fillColor:[...LGRAY]},
+  });
+
+  // Footer
+  const h = doc.internal.pageSize.height;
+  doc.setFillColor(...NAVY); doc.rect(0,h-10,PAGE_W,10,"F");
+  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,200);
+  doc.text(`ImmoGest • ${MONTH_LABEL} • Généré le ${TODAY}`, PAGE_W/2, h-4, {align:"center"});
+
+  doc.save(`ImmoGest_${MONTH_LABEL.replace(/ /g,"_")}.pdf`);
+  showToast("PDF mensuel téléchargé !", "success");
 });
 
 TAB_TITLES["compta"] = "Comptabilité";
+
 
 })();
