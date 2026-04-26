@@ -60,55 +60,28 @@ let unsubTasks=null, unsubOrders=null, unsubSpaces=null, unsubApts=null;
 
 function showFirestorePermissionWarning() {
   if (document.getElementById("firestoreWarning")) return;
-  const banner = document.createElement("div");
-  banner.id = "firestoreWarning";
-  banner.innerHTML = `
-    <div style="position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:1rem">
-      <div style="background:#fff;border-radius:14px;padding:2rem;max-width:480px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.3)">
-        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem">
-          <div style="width:44px;height:44px;background:#fef2f2;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="fa-solid fa-triangle-exclamation" style="color:#dc2626;font-size:1.2rem"></i>
-          </div>
-          <div>
-            <div style="font-weight:700;font-size:1rem;color:#1a2640">Les données ne se sauvegardent plus !</div>
-            <div style="font-size:.82rem;color:#6b7a94;margin-top:.1rem">Les règles Firebase (30 jours) ont expiré</div>
-          </div>
-        </div>
-
-        <p style="font-size:.88rem;color:#4a5568;margin-bottom:1.25rem;line-height:1.6">
-          Tout ce que tu ajoutes <strong>n'est plus sauvegardé</strong> et sera perdu à la déconnexion.
-          Il faut renouveler les règles Firestore en 2 clics :
-        </p>
-
-        <div style="background:#f4f6fb;border-radius:8px;padding:1rem;margin-bottom:1.25rem;font-size:.83rem;line-height:1.7">
-          <strong>1.</strong> Clique sur le bouton ci-dessous<br>
-          <strong>2.</strong> Dans l'éditeur, remplace tout par :<br>
-          <code style="display:block;background:#1a2640;color:#a0cfff;padding:.6rem .8rem;border-radius:6px;margin:.4rem 0;font-size:.78rem;line-height:1.5">rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}</code>
-          <strong>3.</strong> Clique <strong>"Publier"</strong> — c'est tout ✓
-        </div>
-
-        <div style="display:flex;gap:.75rem;flex-wrap:wrap">
-          <a href="https://console.firebase.google.com/project/immogest-e11ff/firestore/rules"
-             target="_blank"
-             style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;background:#e86a1a;color:#fff;padding:.65rem 1rem;border-radius:8px;font-weight:700;font-size:.88rem;text-decoration:none;min-width:200px">
-            <i class="fa-solid fa-arrow-up-right-from-square"></i>
-            Ouvrir Firebase Firestore
-          </a>
-          <button onclick="document.getElementById('firestoreWarning').remove()"
-                  style="padding:.65rem 1rem;background:#f4f6fb;border:1.5px solid #d1d8e8;border-radius:8px;font-weight:600;font-size:.85rem;cursor:pointer;color:#4a5568">
-            Fermer
-          </button>
-        </div>
-      </div>
-    </div>`;
-  document.body.appendChild(banner);
+  // Toast discret en haut de l'écran — pas de popup bloquant
+  const bar = document.createElement("div");
+  bar.id = "firestoreWarning";
+  bar.style.cssText = `
+    position:fixed;top:0;left:0;right:0;z-index:9999;
+    background:#b91c1c;color:#fff;padding:.6rem 1.25rem;
+    display:flex;align-items:center;gap:.75rem;font-size:.82rem;font-weight:600;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
+  `;
+  bar.innerHTML = `
+    <i class="fa-solid fa-triangle-exclamation" style="flex-shrink:0"></i>
+    <span>Règles Firebase expirées — données non sauvegardées.
+      <a href="https://console.firebase.google.com/project/immogest-e11ff/firestore/rules"
+         target="_blank" style="color:#fde68a;text-decoration:underline;margin-left:.3rem">
+        Corriger →
+      </a>
+    </span>
+    <button onclick="document.getElementById('firestoreWarning').remove()"
+      style="margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#fff;
+             padding:.25rem .6rem;border-radius:4px;cursor:pointer;font-size:.8rem">✕</button>
+  `;
+  document.body.prepend(bar);
 }
 
 function startListeners() {
@@ -442,12 +415,13 @@ async function startAuthListener() {
 /* ---- Écran de bienvenue ---- */
 function showWelcomeScreen(user) {
   return new Promise(resolve => {
-    const overlay = document.getElementById("welcomeOverlay");
-    const nameEl  = document.getElementById("welcomeName");
-    const imgEl   = document.getElementById("welcomeAvatar");
-    const iconEl  = document.getElementById("welcomeAvatarIcon");
+    const overlay  = document.getElementById("welcomeOverlay");
+    const nameEl   = document.getElementById("welcomeName");
+    const imgEl    = document.getElementById("welcomeAvatar");
+    const iconEl   = document.getElementById("welcomeAvatarIcon");
 
-    const firstName = (user.displayName || "Bienvenue").split(" ")[0];
+    // Prénom seulement
+    const firstName = (user.displayName || "").split(" ")[0] || "Bienvenue";
     if (nameEl) nameEl.textContent = firstName;
 
     // Avatar
@@ -465,7 +439,7 @@ function showWelcomeScreen(user) {
 
     overlay.classList.remove("hidden");
 
-    // Disparaît automatiquement après 2.2s
+    // Disparaît après 2.4s
     setTimeout(() => {
       overlay.classList.add("welcome-out");
       setTimeout(() => {
@@ -473,7 +447,7 @@ function showWelcomeScreen(user) {
         overlay.classList.remove("welcome-out");
         resolve();
       }, 500);
-    }, 2200);
+    }, 2400);
   });
 }
 
@@ -1337,19 +1311,8 @@ async function seedDemoData() {
    19. INITIALISATION APRÈS CONNEXION
    ============================================================ */
 async function initApp() {
-  initCurrentMonth();   // initialiser le mois courant
+  initCurrentMonth();
   await loadBuildings();
-
-  // ---- Test de sauvegarde au démarrage ----
-  // Si ce test échoue → les règles Firestore ont expiré → avertissement immédiat
-  try {
-    await db.doc("config/healthcheck").set({ ts: Date.now() });
-  } catch(e) {
-    if (e.code === "permission-denied") {
-      showFirestorePermissionWarning();
-      return; // Inutile de continuer sans accès en écriture
-    }
-  }
 
   await seedDemoData();
   startListeners();
