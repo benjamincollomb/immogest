@@ -409,7 +409,8 @@
         <label for="filterSpaceBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
         <select id="filterSpaceBuilding" style="min-width:180px"><option value="">Tous</option></select>
       </div>
-      <div class="spaces-grid">
+      <!-- Parking -->
+      <div class="spaces-grid" style="grid-template-columns:1fr">
         <div class="card">
           <div class="card-header">
             <i class="fa-solid fa-square-parking"></i><h2>Places de parking libres</h2>
@@ -417,12 +418,17 @@
           </div>
           <div class="spaces-list" id="spacesList"><p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucune place libre</p></div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <i class="fa-solid fa-door-open"></i><h2>Appartements libres</h2>
-            <span class="count-badge" id="countApts">0</span>
-          </div>
-          <div class="spaces-list" id="aptsList"><p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucun appartement libre</p></div>
+      </div>
+
+      <!-- Appartements — pleine largeur, cartes détaillées -->
+      <div class="card" style="margin-top:1.25rem">
+        <div class="card-header">
+          <i class="fa-solid fa-door-open"></i>
+          <h2>Appartements libres</h2>
+          <span class="count-badge" id="countApts">0</span>
+        </div>
+        <div class="apts-grid" id="aptsList">
+          <p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucun appartement libre</p>
         </div>
       </div>
     </section>

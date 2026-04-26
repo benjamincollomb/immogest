@@ -1159,24 +1159,75 @@ function renderSpaces(){
     sl.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click", async ()=>deleteSpace(b.dataset.id)));
   }
 
-  const al=document.getElementById("aptsList");
-  if(!filtA.length){
-    al.innerHTML=`<p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucun appartement libre</p>`;
+  const al = document.getElementById("aptsList");
+  if (!filtA.length) {
+    al.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-circle-check"></i>Aucun appartement libre</p>`;
   } else {
-    al.innerHTML=filtA.map(a=>`
-      <div class="space-item">
-        <div class="space-item-left">
-          <i class="fa-solid fa-door-open"></i>
-          <div class="space-item-info">
-            <div class="space-item-name">${escHtml(a.name)}</div>
-            <div class="space-item-meta">${escHtml(a.building)}${a.floor?" · "+escHtml(a.floor):""}${a.rooms?" · "+escHtml(a.rooms)+" pièces":""}${a.notes?" · "+escHtml(a.notes):""}</div>
+    al.innerHTML = filtA.map(a => {
+      // Badge disponibilité
+      const today = new Date().toISOString().split("T")[0];
+      const isAvail = !a.availability || a.availability <= today;
+      const availLabel = a.availability
+        ? (isAvail ? "Disponible" : `Dès le ${formatDate(a.availability)}`)
+        : "Disponible";
+      const availColor = isAvail ? "#276749" : "#c05a1a";
+      const availBg    = isAvail ? "#f0fff4"  : "#fff0e6";
+
+      return `
+      <div class="apt-card">
+        <!-- En-tête -->
+        <div class="apt-card-header">
+          <div class="apt-card-icon"><i class="fa-solid fa-door-open"></i></div>
+          <div class="apt-card-title">
+            <div class="apt-name">${escHtml(a.name)}</div>
+            <div class="apt-building">
+              <i class="fa-solid fa-building" style="font-size:.7rem"></i>
+              ${escHtml(a.building || "—")}
+            </div>
+          </div>
+          <div class="apt-card-actions">
+            <button class="btn-icon edit"   data-id="${a.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn-icon delete" data-id="${a.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
           </div>
         </div>
-        <div class="space-item-actions">
-          <button class="btn-icon edit"   data-id="${a.id}"><i class="fa-solid fa-pen"></i></button>
-          <button class="btn-icon delete" data-id="${a.id}"><i class="fa-solid fa-trash"></i></button>
+
+        <!-- Grille d'infos -->
+        <div class="apt-info-grid">
+          ${a.rooms ? `<div class="apt-info-cell">
+            <div class="apt-info-label"><i class="fa-solid fa-door-closed"></i> Pièces</div>
+            <div class="apt-info-value">${escHtml(a.rooms)}</div>
+          </div>` : ""}
+          ${a.surface ? `<div class="apt-info-cell">
+            <div class="apt-info-label"><i class="fa-solid fa-ruler-combined"></i> Surface</div>
+            <div class="apt-info-value">${escHtml(a.surface)} m²</div>
+          </div>` : ""}
+          ${a.floor ? `<div class="apt-info-cell">
+            <div class="apt-info-label"><i class="fa-solid fa-elevator"></i> Étage</div>
+            <div class="apt-info-value">${escHtml(a.floor)}</div>
+          </div>` : ""}
+          ${a.price ? `<div class="apt-info-cell">
+            <div class="apt-info-label"><i class="fa-solid fa-tag"></i> Loyer</div>
+            <div class="apt-info-value" style="color:var(--blue);font-weight:700">${escHtml(a.price)} CHF</div>
+          </div>` : ""}
+          ${a.charges ? `<div class="apt-info-cell">
+            <div class="apt-info-label"><i class="fa-solid fa-bolt"></i> Charges</div>
+            <div class="apt-info-value">${escHtml(a.charges)} CHF</div>
+          </div>` : ""}
+          ${(a.price && a.charges) ? `<div class="apt-info-cell">
+            <div class="apt-info-label"><i class="fa-solid fa-coins"></i> Total/mois</div>
+            <div class="apt-info-value" style="color:#276749;font-weight:700">${(parseFloat(a.price||0)+parseFloat(a.charges||0)).toFixed(0)} CHF</div>
+          </div>` : ""}
         </div>
-      </div>`).join("");
+
+        <!-- Footer : disponibilité + notes -->
+        <div class="apt-card-footer">
+          <span class="apt-avail-badge" style="color:${availColor};background:${availBg}">
+            <i class="fa-solid fa-calendar-check"></i> ${availLabel}
+          </span>
+          ${a.notes ? `<span class="apt-notes"><i class="fa-solid fa-note-sticky"></i> ${escHtml(a.notes)}</span>` : ""}
+        </div>
+      </div>`}).join("");
+
     al.querySelectorAll(".btn-icon.edit").forEach(b=>b.addEventListener("click", async ()=>editApt(b.dataset.id)));
     al.querySelectorAll(".btn-icon.delete").forEach(b=>b.addEventListener("click", async ()=>deleteApt(b.dataset.id)));
   }
@@ -1227,37 +1278,76 @@ async function deleteSpace(id){
 
 function aptFormHTML(a={}){
   return `
-    <div class="form-group"><label>Numéro / Nom *</label>
-      <input id="fAName" type="text" placeholder="Ex : Appartement 4B" value="${escHtml(a.name||"")}"/>
+    <div class="form-row">
+      <div class="form-group"><label>Numéro / Nom *</label>
+        <input id="fAName" type="text" placeholder="Ex : Appartement 4B, Studio 12…" value="${escHtml(a.name||"")}"/>
+      </div>
+      <div class="form-group"><label>Immeuble</label>
+        <select id="fABuilding">
+          <option value="">— Aucun —</option>
+          ${buildingOptions(a.building||"")}
+        </select>
+      </div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Immeuble</label>
-        <select id="fABuilding">${buildingOptions(a.building||BUILDINGS[0])}</select>
+      <div class="form-group"><label>Nombre de pièces</label>
+        <input id="fARooms" type="text" placeholder="Ex : 3.5" value="${escHtml(a.rooms||"")}"/>
       </div>
+      <div class="form-group"><label>Surface (m²)</label>
+        <input id="fASurface" type="number" min="0" step="0.5" placeholder="Ex : 72" value="${escHtml(a.surface||"")}"/>
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-group"><label>Étage</label>
-        <input id="fAFloor" type="text" placeholder="Ex : 3e" value="${escHtml(a.floor||"")}"/>
+        <input id="fAFloor" type="text" placeholder="Ex : 3e, Rez-de-chaussée…" value="${escHtml(a.floor||"")}"/>
+      </div>
+      <div class="form-group"><label>Disponible dès le</label>
+        <input id="fAAvailability" type="date" value="${a.availability||""}"/>
       </div>
     </div>
-    <div class="form-group"><label>Nombre de pièces</label>
-      <input id="fARooms" type="text" placeholder="Ex : 3.5" value="${escHtml(a.rooms||"")}"/>
+    <div class="form-row">
+      <div class="form-group"><label>Loyer (CHF/mois)</label>
+        <div style="position:relative">
+          <input id="fAPrice" type="number" min="0" step="50" placeholder="Ex : 1450" value="${escHtml(a.price||"")}"/>
+        </div>
+      </div>
+      <div class="form-group"><label>Charges (CHF/mois)</label>
+        <input id="fACharges" type="number" min="0" step="10" placeholder="Ex : 150" value="${escHtml(a.charges||"")}"/>
+      </div>
     </div>
-    <div class="form-group"><label>Notes</label>
-      <textarea id="fANotes" placeholder="Loyer, disponibilité…">${escHtml(a.notes||"")}</textarea>
+    ${(a.price||a.charges) ? `
+    <div style="background:var(--blue-pale);border-radius:var(--radius-sm);padding:.6rem 1rem;margin-bottom:.5rem;font-size:.85rem;color:var(--blue);font-weight:600">
+      <i class="fa-solid fa-coins"></i> Total estimé : ${(parseFloat(a.price||0)+parseFloat(a.charges||0)).toFixed(0)} CHF/mois
+    </div>` : ""}
+    <div class="form-group"><label>Notes <span style="color:var(--text-light);font-weight:400">(optionnel)</span></label>
+      <textarea id="fANotes" placeholder="Travaux prévus, équipements, remarques…" rows="2">${escHtml(a.notes||"")}</textarea>
     </div>`;
 }
 document.getElementById("btnAddApt").addEventListener("click", async ()=>{
-  openModal("Nouvel appartement libre",aptFormHTML(), async ()=>{
-    const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
-    const newApt={id:uid(),name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")};
+  openModal("Nouvel appartement libre", aptFormHTML(), async ()=>{
+    const name=mval("fAName");
+    if(!name){showToast("Le nom est obligatoire.","error");return;}
+    const newApt={id:uid(),name,
+      building:mval("fABuilding"), rooms:mval("fARooms"),
+      surface:mval("fASurface"),   floor:mval("fAFloor"),
+      availability:mval("fAAvailability"),
+      price:mval("fAPrice"),       charges:mval("fACharges"),
+      notes:mval("fANotes")};
     await fsAdd("apts",newApt); closeModal();
     showToast("Appartement ajouté !","success");
   });
 });
 async function editApt(id){
   const a=apts.find(a=>a.id===id); if(!a)return;
-  openModal("Modifier l'appartement",aptFormHTML(a), async ()=>{
-    const name=mval("fAName"); if(!name){showToast("Le nom est obligatoire.","error");return;}
-    Object.assign(a,{name,building:mval("fABuilding"),floor:mval("fAFloor"),rooms:mval("fARooms"),notes:mval("fANotes")});
+  openModal("Modifier l\'appartement", aptFormHTML(a), async ()=>{
+    const name=mval("fAName");
+    if(!name){showToast("Le nom est obligatoire.","error");return;}
+    Object.assign(a,{name,
+      building:mval("fABuilding"), rooms:mval("fARooms"),
+      surface:mval("fASurface"),   floor:mval("fAFloor"),
+      availability:mval("fAAvailability"),
+      price:mval("fAPrice"),       charges:mval("fACharges"),
+      notes:mval("fANotes")});
     await fsUpdate("apts",a.id,a); closeModal();
     showToast("Appartement mis à jour.","success");
   });
