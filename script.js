@@ -682,6 +682,7 @@ function switchTab(tabId){
   if(tabId==="orders")    renderOrders();
   if(tabId==="spaces")    renderSpaces();
   if(tabId==="compta")    renderCompta();
+  if(tabId==="denonce")   renderDenonciations();
 }
 
 /* -------- Sidebar mobile -------- */
@@ -1125,14 +1126,30 @@ async function deleteOrder(id){
    17. PLACES & APPARTEMENTS
    ============================================================ */
 function bindSpaceFilter(){
-  const el=document.getElementById("filterSpaceBuilding");
-  if(el) el.addEventListener("input",renderSpaces);
+  const el = document.getElementById("filterSpaceBuilding");
+  if (el) el.addEventListener("input", renderSpaces);
+  const rEl = document.getElementById("filterAptRooms");
+  if (rEl) rEl.addEventListener("input", renderSpaces);
 }
 
 function renderSpaces(){
-  const bld=document.getElementById("filterSpaceBuilding")?.value||"";
-  const filtS=bld?spaces.filter(s=>s.building===bld):spaces;
-  const filtA=bld?apts.filter(a=>a.building===bld):apts;
+  const bld   = document.getElementById("filterSpaceBuilding")?.value || "";
+  const rooms = document.getElementById("filterAptRooms")?.value || "";
+  const filtS = bld ? spaces.filter(s => s.building === bld) : spaces;
+  let   filtA = bld ? apts.filter(a => a.building === bld) : [...apts];
+
+  // Filtre par nombre de pièces
+  if (rooms) {
+    filtA = filtA.filter(a => {
+      const r = parseFloat(a.rooms);
+      if (rooms === "1")   return r < 2;
+      if (rooms === "2")   return r >= 2 && r < 3;
+      if (rooms === "3")   return r >= 3 && r < 4;
+      if (rooms === "4")   return r >= 4 && r < 5;
+      if (rooms === "5+")  return r >= 5;
+      return true;
+    });
+  }
 
   document.getElementById("countSpaces").textContent=filtS.length;
   document.getElementById("countApts").textContent=filtA.length;
@@ -1408,8 +1425,10 @@ async function initApp() {
   startListeners();
   startComptaListener();
   startArchiveListener();
+  startDenonceListener();
   refreshBuildingSelects();
   refreshComptaBuildingSelect();
+  refreshDenonceFilters();
   bindTaskFilters();
   bindOrderFilters();
   bindSpaceFilter();
@@ -2693,7 +2712,277 @@ document.getElementById("btnExportMonthPDF").addEventListener("click", async () 
   showToast(`PDF "${filename}" téléchargé !`, "success");
 });
 
-TAB_TITLES["compta"] = "Comptabilité";
+TAB_TITLES["compta"]  = "Comptabilité";
+TAB_TITLES["denonce"] = "Dénonciations";
 
+/* ============================================================
+   DÉNONCIATIONS — Véhicules en infraction
+   Collection Firestore : "denonciations"
+   ============================================================ */
+
+let denonciations  = [];
+let unsubDenonce   = null;
+
+function startDenonceListener() {
+  if (unsubDenonce) unsubDenonce();
+  unsubDenonce = col("denonciations")
+    .onSnapshot(snap => {
+      denonciations = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+      if (document.getElementById("tab-denonce").classList.contains("active")) renderDenonciations();
+      // Badge sidebar
+      const badge = document.getElementById("badgeDenonce");
+      if (badge) badge.textContent = denonciations.length;
+    }, err => { if (err.code === "permission-denied") showFirestorePermissionWarning(); });
+}
+
+/* ---- Filtres ---- */
+function getFilteredDenonciations() {
+  const bld    = document.getElementById("filterDenonceBuilding")?.value || "";
+  const plate  = document.getElementById("filterDenoncePlate")?.value.trim().toLowerCase() || "";
+  const search = document.getElementById("filterDenonceSearch")?.value.trim().toLowerCase() || "";
+  let list = [...denonciations];
+  if (bld)    list = list.filter(d => d.building === bld);
+  if (plate)  list = list.filter(d => (d.plate||"").toLowerCase().includes(plate));
+  if (search) list = list.filter(d =>
+    (d.model||"").toLowerCase().includes(search) ||
+    (d.color||"").toLowerCase().includes(search) ||
+    (d.reason||"").toLowerCase().includes(search) ||
+    (d.notes||"").toLowerCase().includes(search)
+  );
+  return list;
+}
+
+/* ---- Rendu ---- */
+function renderDenonciations() {
+  const list = getFilteredDenonciations();
+  const container = document.getElementById("denonceList");
+  const countEl   = document.getElementById("denonceCount");
+  if (countEl) countEl.textContent = list.length;
+
+  if (!list.length) {
+    container.innerHTML = `<div class="card"><p class="empty-msg">
+      <i class="fa-solid fa-car-burst"></i>Aucune dénonciation trouvée</p></div>`;
+    return;
+  }
+
+  // Grouper par plaque si filtre plaque actif
+  const plateFilter = document.getElementById("filterDenoncePlate")?.value.trim();
+  if (plateFilter) {
+    // Afficher un header résumé de la plaque
+    const plateGroup = list.reduce((acc, d) => {
+      const k = (d.plate || "—").toUpperCase();
+      if (!acc[k]) acc[k] = [];
+      acc[k].push(d);
+      return acc;
+    }, {});
+
+    container.innerHTML = Object.entries(plateGroup).map(([plate, items]) => `
+      <div class="denonce-plate-group">
+        <div class="denonce-plate-header">
+          <div class="denonce-plate-badge">
+            <i class="fa-solid fa-hashtag"></i> ${escHtml(plate)}
+          </div>
+          <span style="font-size:.82rem;color:var(--text-light)">${items.length} dénonciation${items.length>1?"s":""}</span>
+        </div>
+        ${items.map(d => denonceCardHTML(d)).join("")}
+      </div>`).join("");
+  } else {
+    container.innerHTML = `<div class="denonce-cards-grid">${list.map(d => denonceCardHTML(d)).join("")}</div>`;
+  }
+
+  // Événements
+  container.querySelectorAll(".btn-icon.edit[data-denonce-id]").forEach(btn => {
+    btn.addEventListener("click", () => editDenonce(btn.dataset.denonceId));
+  });
+  container.querySelectorAll(".btn-icon.delete[data-denonce-id]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Supprimer cette dénonciation ?")) return;
+      await fsDelete("denonciations", btn.dataset.denonceId);
+      showToast("Dénonciation supprimée.", "info");
+    });
+  });
+  // Clic sur plaque pour filtrer
+  container.querySelectorAll(".denonce-plate-filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const plateInput = document.getElementById("filterDenoncePlate");
+      if (plateInput) { plateInput.value = btn.dataset.plate; renderDenonciations(); }
+    });
+  });
+}
+
+/* ---- HTML d'une carte dénonciation ---- */
+function denonceCardHTML(d) {
+  const statusColors = {
+    "Envoyée":    { bg:"#fff0e6", c:"#c05a1a", icon:"fa-paper-plane" },
+    "En cours":   { bg:"#e8f0fb", c:"var(--blue)", icon:"fa-spinner" },
+    "Traitée":    { bg:"#f0fff4", c:"#276749", icon:"fa-circle-check" },
+    "Classée":    { bg:"#f4f6fb", c:"#6b7a94", icon:"fa-archive" },
+  };
+  const st = statusColors[d.status] || { bg:"#f4f6fb", c:"#6b7a94", icon:"fa-circle" };
+
+  return `
+  <div class="denonce-card">
+    <div class="denonce-card-header">
+      <!-- Plaque + véhicule -->
+      <div class="denonce-vehicle">
+        <div class="denonce-plate-btn denonce-plate-filter-btn" data-plate="${escHtml(d.plate||"")}"
+             title="Filtrer par cette plaque">
+          <i class="fa-solid fa-hashtag" style="font-size:.65rem;margin-right:.2rem"></i>
+          ${escHtml(d.plate || "—")}
+        </div>
+        <div class="denonce-model">
+          ${escHtml(d.color || "")}${d.color && d.model ? " · " : ""}${escHtml(d.model || "")}
+        </div>
+      </div>
+      <!-- Actions -->
+      <div style="display:flex;gap:.3rem">
+        <button class="btn-icon edit"   data-denonce-id="${d.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+        <button class="btn-icon delete" data-denonce-id="${d.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>
+
+    <div class="denonce-card-body">
+      <!-- Raison -->
+      <div class="denonce-reason">${escHtml(d.reason || "—")}</div>
+
+      <!-- Tags -->
+      <div class="denonce-meta">
+        ${d.building ? `<span class="tag tag-building" style="font-size:.72rem"><i class="fa-solid fa-building"></i> ${escHtml(d.building)}</span>` : ""}
+        ${d.status ? `<span class="tag" style="background:${st.bg};color:${st.c};font-size:.72rem">
+          <i class="fa-solid ${st.icon}"></i> ${escHtml(d.status)}
+        </span>` : ""}
+        <span class="tag tag-building" style="font-size:.72rem">
+          <i class="fa-regular fa-calendar"></i> ${formatDate(d.date)}
+        </span>
+      </div>
+
+      ${d.notes ? `<div class="denonce-notes">${escHtml(d.notes)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ---- Formulaire dénonciation ---- */
+function denonceFormHTML(d = {}) {
+  const today = new Date().toISOString().split("T")[0];
+  return `
+    <div class="form-group">
+      <label>Numéro de plaque *</label>
+      <input id="fPlate" type="text" placeholder="Ex : VD 123456"
+             value="${escHtml(d.plate||"")}"
+             style="font-size:1.05rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Modèle du véhicule</label>
+        <input id="fModel" type="text" placeholder="Ex : VW Golf, BMW 320i…" value="${escHtml(d.model||"")}"/>
+      </div>
+      <div class="form-group">
+        <label>Couleur</label>
+        <input id="fColor" type="text" placeholder="Ex : Noir, Blanc, Rouge…" value="${escHtml(d.color||"")}"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Immeuble</label>
+        <select id="fDenonceBuilding">
+          <option value="">— Général —</option>
+          ${buildingOptions(d.building||"")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input id="fDenonceDate" type="date" value="${d.date||today}"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Raison de la dénonciation *</label>
+      <input id="fReason" type="text"
+             placeholder="Ex : Stationnement interdit, Emplacement occupé sans autorisation…"
+             value="${escHtml(d.reason||"")}"/>
+    </div>
+    <div class="form-group">
+      <label>Statut</label>
+      <select id="fDenonceStatus">
+        <option value="Envoyée"  ${(!d.status||d.status==="Envoyée") ?"selected":""}>📤 Envoyée</option>
+        <option value="En cours" ${d.status==="En cours"?"selected":""}>⏳ En cours</option>
+        <option value="Traitée"  ${d.status==="Traitée" ?"selected":""}>✅ Traitée</option>
+        <option value="Classée"  ${d.status==="Classée" ?"selected":""}>🗂 Classée</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Notes supplémentaires</label>
+      <textarea id="fDenonceNotes" placeholder="Détails, emplacement exact, photos…">${escHtml(d.notes||"")}</textarea>
+    </div>`;
+}
+
+/* ---- Bouton ajouter ---- */
+document.getElementById("btnAddDenonce").addEventListener("click", () => {
+  openModal("Nouvelle dénonciation", denonceFormHTML(), async () => {
+    const plate  = mval("fPlate");
+    const reason = mval("fReason");
+    if (!plate)  { showToast("Le numéro de plaque est obligatoire.", "error"); return; }
+    if (!reason) { showToast("La raison est obligatoire.", "error"); return; }
+    await fsAdd("denonciations", {
+      id: uid(),
+      plate:    plate.toUpperCase(),
+      model:    mval("fModel"),
+      color:    mval("fColor"),
+      building: mval("fDenonceBuilding"),
+      date:     mval("fDenonceDate"),
+      reason,
+      status:   mval("fDenonceStatus"),
+      notes:    mval("fDenonceNotes"),
+      createdAt: new Date().toISOString(),
+    });
+    closeModal();
+    showToast("Dénonciation enregistrée !", "success");
+  });
+});
+
+/* ---- Modifier ---- */
+async function editDenonce(id) {
+  const d = denonciations.find(d => d.id === id);
+  if (!d) return;
+  openModal("Modifier la dénonciation", denonceFormHTML(d), async () => {
+    const plate  = mval("fPlate");
+    const reason = mval("fReason");
+    if (!plate)  { showToast("Le numéro de plaque est obligatoire.", "error"); return; }
+    if (!reason) { showToast("La raison est obligatoire.", "error"); return; }
+    await fsUpdate("denonciations", id, {
+      ...d,
+      plate:    plate.toUpperCase(),
+      model:    mval("fModel"),
+      color:    mval("fColor"),
+      building: mval("fDenonceBuilding"),
+      date:     mval("fDenonceDate"),
+      reason,
+      status:   mval("fDenonceStatus"),
+      notes:    mval("fDenonceNotes"),
+    });
+    closeModal();
+    showToast("Dénonciation mise à jour.", "success");
+  });
+}
+
+/* ---- Filtres ---- */
+["filterDenonceBuilding","filterDenoncePlate","filterDenonceSearch"].forEach(id => {
+  document.getElementById(id)?.addEventListener("input", renderDenonciations);
+});
+
+/* ---- Init building select ---- */
+function refreshDenonceFilters() {
+  const sel = document.getElementById("filterDenonceBuilding");
+  if (!sel) return;
+  const v = sel.value;
+  sel.innerHTML = '<option value="">Tous les immeubles</option>';
+  BUILDINGS.forEach(b => {
+    const opt = document.createElement("option");
+    opt.value = b; opt.textContent = b;
+    if (b === v) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
 
 })();

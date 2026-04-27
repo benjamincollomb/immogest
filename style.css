@@ -2957,3 +2957,115 @@ img { display:block; max-width:100%; }
   .apt-info-cell:nth-child(3n) { border-right: 1px solid var(--border); }
   .apt-info-cell:nth-child(2n) { border-right: none; }
 }
+
+/* ============================================================
+   DÉNONCIATIONS
+   ============================================================ */
+.denonce-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+/* ---- Carte individuelle ---- */
+.denonce-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border-left: 4px solid var(--orange);
+  transition: box-shadow var(--transition), transform var(--transition);
+  animation: fadeIn .2s ease;
+}
+.denonce-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+.denonce-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .9rem 1rem .6rem;
+  gap: .5rem;
+}
+.denonce-vehicle { display: flex; align-items: center; gap: .65rem; flex: 1; min-width: 0; }
+
+/* Plaque immatriculation */
+.denonce-plate-btn {
+  display: inline-flex;
+  align-items: center;
+  background: var(--navy);
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  font-size: .88rem;
+  padding: .3rem .8rem;
+  border-radius: 6px;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(26,38,64,.25);
+  flex-shrink: 0;
+}
+.denonce-plate-filter-btn {
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.denonce-plate-filter-btn:hover { background: var(--blue); }
+.denonce-model {
+  font-size: .85rem;
+  color: var(--text-light);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.denonce-card-body { padding: .1rem 1rem .9rem; }
+.denonce-reason {
+  font-size: .92rem;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: .55rem;
+  line-height: 1.4;
+}
+.denonce-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-bottom: .5rem;
+}
+.denonce-notes {
+  font-size: .78rem;
+  color: var(--text-light);
+  font-style: italic;
+  padding: .45rem .6rem;
+  background: var(--bg);
+  border-radius: 5px;
+  margin-top: .35rem;
+  border-left: 3px solid var(--border);
+}
+
+/* ---- Groupe par plaque ---- */
+.denonce-plate-group { margin-bottom: 1.25rem; }
+.denonce-plate-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem 0 .65rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: .65rem;
+}
+.denonce-plate-badge {
+  background: var(--navy);
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: .35rem 1rem;
+  border-radius: 7px;
+  letter-spacing: .1em;
+  box-shadow: 0 2px 8px rgba(26,38,64,.2);
+}
+.denonce-plate-group .denonce-cards-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+
+/* ---- Responsive ---- */
+@media(max-width:640px) {
+  .denonce-cards-grid { grid-template-columns: 1fr; }
+}

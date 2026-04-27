@@ -240,6 +240,10 @@
       <a href="#" class="nav-item" data-tab="compta">
         <i class="fa-solid fa-coins"></i><span>Comptabilité</span>
       </a>
+      <a href="#" class="nav-item" data-tab="denonce">
+        <i class="fa-solid fa-car-burst"></i><span>Dénonciations</span>
+        <span class="badge" id="badgeDenonce">0</span>
+      </a>
 
       <div class="nav-separator"></div>
 
@@ -405,9 +409,23 @@
           <button class="btn btn-secondary" id="btnAddApt"><i class="fa-solid fa-door-open"></i> Nouvel appartement</button>
         </div>
       </div>
-      <div class="filter-group" style="margin-bottom:1.5rem">
-        <label for="filterSpaceBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
-        <select id="filterSpaceBuilding" style="min-width:180px"><option value="">Tous</option></select>
+      <!-- Filtres -->
+      <div class="filters-bar" style="margin-bottom:1.5rem">
+        <div class="filter-group">
+          <label for="filterSpaceBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
+          <select id="filterSpaceBuilding"><option value="">Tous les immeubles</option></select>
+        </div>
+        <div class="filter-group">
+          <label for="filterAptRooms"><i class="fa-solid fa-door-closed"></i> Nombre de pièces</label>
+          <select id="filterAptRooms">
+            <option value="">Toutes</option>
+            <option value="1">Studio / 1 pièce</option>
+            <option value="2">2 pièces</option>
+            <option value="3">3 pièces</option>
+            <option value="4">4 pièces</option>
+            <option value="5+">5 pièces et +</option>
+          </select>
+        </div>
       </div>
       <!-- Parking -->
       <div class="spaces-grid" style="grid-template-columns:1fr">
@@ -616,6 +634,46 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- ======================================================
+         TAB: DÉNONCIATIONS
+    ====================================================== -->
+    <section class="tab-content" id="tab-denonce">
+      <div class="page-header">
+        <div>
+          <h1>Dénonciations</h1>
+          <p class="subtitle">Véhicules en infraction</p>
+        </div>
+        <button class="btn btn-primary" id="btnAddDenonce">
+          <i class="fa-solid fa-plus"></i> Nouvelle dénonciation
+        </button>
+      </div>
+
+      <!-- Filtres -->
+      <div class="filters-bar">
+        <div class="filter-group">
+          <label for="filterDenonceBuilding"><i class="fa-solid fa-building"></i> Immeuble</label>
+          <select id="filterDenonceBuilding"><option value="">Tous</option></select>
+        </div>
+        <div class="filter-group search-group">
+          <label for="filterDenoncePlate"><i class="fa-solid fa-hashtag"></i> N° de plaque</label>
+          <input type="text" id="filterDenoncePlate" placeholder="Ex : VD 123456"/>
+        </div>
+        <div class="filter-group search-group">
+          <label for="filterDenonceSearch"><i class="fa-solid fa-magnifying-glass"></i> Recherche</label>
+          <input type="text" id="filterDenonceSearch" placeholder="Modèle, couleur, raison…"/>
+        </div>
+      </div>
+
+      <!-- Compteur -->
+      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:.6rem">
+        <span class="count-badge" id="denonceCount" style="background:var(--orange)">0</span>
+        <span style="font-size:.85rem;color:var(--text-light)">dénonciation(s)</span>
+      </div>
+
+      <!-- Liste -->
+      <div id="denonceList"></div>
     </section>
 
   </div><!-- /main-wrapper -->
