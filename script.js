@@ -1381,47 +1381,12 @@ async function deleteApt(id){
 /* ============================================================
    18. DONNÉES DE DÉMO — uniquement si Firestore est vide
    ============================================================ */
-async function seedDemoData() {
-  const snap = await col("tasks").limit(1).get();
-  if (!snap.empty) return;
-  showToast("Premier lancement — ajout des données de démo…", "info");
-  const dT=[
-    {id:uid(),title:"Tondre la pelouse (côté rue)",        building:BUILDINGS[0],priority:"medium",status:"todo",      description:"Secteur principal et bordures"},
-    {id:uid(),title:"Remplacer ampoules couloir 2e étage", building:BUILDINGS[2],priority:"high",  status:"todo",      description:"3 ampoules E27"},
-    {id:uid(),title:"Nettoyage salle de poubelles",        building:BUILDINGS[4],priority:"high",  status:"inprogress",description:""},
-    {id:uid(),title:"Contrôle extincteurs",                building:BUILDINGS[1],priority:"medium",status:"todo",      description:"Vérification annuelle"},
-    {id:uid(),title:"Débouchage gouttière nord",           building:BUILDINGS[3],priority:"low",   status:"todo",      description:""},
-  ];
-  const dO=[
-    {id:uid(),supplier:"Hornbach",  date:"2025-06-01",status:"received",building:BUILDINGS[2],notes:"Commande urgente",
-     items:[{id:uid(),name:"Ampoules LED E27",qty:"20",unit:"pcs",notes:"LED-E27-10W"},{id:uid(),name:"Câble 2.5mm",qty:"5",unit:"m",notes:""}]},
-    {id:uid(),supplier:"Migros Pro",date:"2025-06-05",status:"ordered", building:"",notes:"Livraison jeudi",
-     items:[{id:uid(),name:"Sel adoucisseur",qty:"2",unit:"sacs",notes:""},{id:uid(),name:"Nettoyant sol",qty:"4",unit:"L",notes:""},{id:uid(),name:"Sacs 110L",qty:"3",unit:"rouleaux",notes:""}]},
-  ];
-  const dS=[
-    {id:uid(),name:"Place 3",  building:BUILDINGS[0],type:"indoor",  notes:""},
-    {id:uid(),name:"Place 11", building:BUILDINGS[1],type:"outdoor", notes:""},
-  ];
-  const dA=[
-    {id:uid(),name:"Appartement 8A",building:BUILDINGS[2],floor:"4e",rooms:"4.5",notes:"Disponible juillet"},
-    {id:uid(),name:"Studio 2",      building:BUILDINGS[4],floor:"RDC",rooms:"1.5",notes:"Peinture à prévoir"},
-  ];
-  const batch=db.batch();
-  dT.forEach(d=>{const{id,...r}=d;batch.set(col("tasks" ).doc(id),r);});
-  dO.forEach(d=>{const{id,...r}=d;batch.set(col("orders").doc(id),r);});
-  dS.forEach(d=>{const{id,...r}=d;batch.set(col("spaces").doc(id),r);});
-  dA.forEach(d=>{const{id,...r}=d;batch.set(col("apts"  ).doc(id),r);});
-  await batch.commit();
-}
-
 /* ============================================================
    19. INITIALISATION APRÈS CONNEXION
    ============================================================ */
 async function initApp() {
   initCurrentMonth();
   await loadBuildings();
-
-  await seedDemoData();
   startListeners();
   startComptaListener();
   startArchiveListener();
@@ -2854,7 +2819,7 @@ function denonceCardHTML(d) {
           <i class="fa-solid ${st.icon}"></i> ${escHtml(d.status)}
         </span>` : ""}
         <span class="tag tag-building" style="font-size:.72rem">
-          <i class="fa-regular fa-calendar"></i> ${formatDate(d.date)}
+          <i class="fa-regular fa-calendar"></i> ${formatDateFull(d.date)}
         </span>
       </div>
 
@@ -2892,8 +2857,9 @@ function denonceFormHTML(d = {}) {
         </select>
       </div>
       <div class="form-group">
-        <label>Date</label>
-        <input id="fDenonceDate" type="date" value="${d.date||today}"/>
+        <label>Date & heure *</label>
+        <input id="fDenonceDate" type="datetime-local"
+               value="${d.date ? new Date(d.date).toISOString().slice(0,16) : new Date().toISOString().slice(0,16)}"/>
       </div>
     </div>
     <div class="form-group">
@@ -2924,13 +2890,14 @@ document.getElementById("btnAddDenonce").addEventListener("click", () => {
     const reason = mval("fReason");
     if (!plate)  { showToast("Le numéro de plaque est obligatoire.", "error"); return; }
     if (!reason) { showToast("La raison est obligatoire.", "error"); return; }
+    const dateVal = mval("fDenonceDate");
     await fsAdd("denonciations", {
       id: uid(),
       plate:    plate.toUpperCase(),
       model:    mval("fModel"),
       color:    mval("fColor"),
       building: mval("fDenonceBuilding"),
-      date:     mval("fDenonceDate"),
+      date:     dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
       reason,
       status:   mval("fDenonceStatus"),
       notes:    mval("fDenonceNotes"),
@@ -2950,13 +2917,14 @@ async function editDenonce(id) {
     const reason = mval("fReason");
     if (!plate)  { showToast("Le numéro de plaque est obligatoire.", "error"); return; }
     if (!reason) { showToast("La raison est obligatoire.", "error"); return; }
+    const dateVal = mval("fDenonceDate");
     await fsUpdate("denonciations", id, {
       ...d,
       plate:    plate.toUpperCase(),
       model:    mval("fModel"),
       color:    mval("fColor"),
       building: mval("fDenonceBuilding"),
-      date:     mval("fDenonceDate"),
+      date:     dateVal ? new Date(dateVal).toISOString() : new Date().toISOString(),
       reason,
       status:   mval("fDenonceStatus"),
       notes:    mval("fDenonceNotes"),
