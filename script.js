@@ -3152,9 +3152,9 @@ function getActiveSession() {
 
 /* ---- Rendu principal ---- */
 function renderTimbrage() {
-  document.getElementById("timbreMonthDisplay").textContent = formatMonthDisplay(timbreMonth);
+  const displayEl = document.getElementById("timbreMonthDisplay");
+  if (displayEl) displayEl.textContent = formatMonthDisplay(timbreMonth);
 
-  // Filtrer les entrées du mois affiché (terminées seulement pour les stats)
   const monthEntries = timbrages.filter(t => {
     const m = t.month || (t.dateDebut ? t.dateDebut.slice(0,7) : "");
     return m === timbreMonth;
@@ -3166,54 +3166,52 @@ function renderTimbrage() {
   const jours    = new Set(completed.map(t => t.dateDebut?.slice(0,10))).size;
   const moy      = jours ? minutesToHM(totalMin / jours) : "—";
 
-  document.getElementById("timbreTotal").textContent   = minutesToHM(totalMin);
-  document.getElementById("timbreJours").textContent   = jours + (jours <= 1 ? " jour" : " jours");
-  document.getElementById("timbreMoyenne").textContent = moy;
-  document.getElementById("timbreCount").textContent   = completed.length;
+  const el = id => document.getElementById(id);
+  if (el("timbreTotal"))   el("timbreTotal").textContent   = minutesToHM(totalMin);
+  if (el("timbreJours"))   el("timbreJours").textContent   = jours + (jours <= 1 ? " jour" : " jours");
+  if (el("timbreMoyenne")) el("timbreMoyenne").textContent = moy;
+  if (el("timbreCount"))   el("timbreCount").textContent   = completed.length;
 
   // Session active
-  const active = getActiveSession();
-  const enCoursCard = document.getElementById("timbreEnCours");
-  const statusDot   = document.getElementById("timbreStatusDot");
-  const statusText  = document.getElementById("timbreStatusText");
-  const btnDebut    = document.getElementById("btnTimbreDebut");
-  const btnFin      = document.getElementById("btnTimbreFin");
+  const active    = getActiveSession();
+  const enCours   = el("timbreEnCours");
+  const statusDot = el("timbreStatusDot");
+  const statusTxt = el("timbreStatusText");
+  const btnDebut  = el("btnTimbreDebut");
+  const btnFin    = el("btnTimbreFin");
 
   if (active) {
-    enCoursCard.style.display = "flex";
-    statusDot.className = "timbre-status-dot active";
-    statusText.textContent = `En cours depuis ${new Date(active.dateDebut).toLocaleTimeString("fr-CH", {hour:"2-digit",minute:"2-digit"})}`;
-    btnDebut.disabled = true;
-    btnDebut.style.opacity = ".4";
-    btnFin.disabled = false;
-    btnFin.style.opacity = "1";
+    if (enCours) enCours.style.display = "flex";
+    if (statusDot) statusDot.className = "timbre-status-dot active";
+    if (statusTxt) statusTxt.textContent = `En cours depuis ${new Date(active.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}`;
+    if (btnDebut) { btnDebut.disabled = true;  btnDebut.style.opacity = ".4"; }
+    if (btnFin)   { btnFin.disabled   = false; btnFin.style.opacity   = "1"; }
 
-    // Chrono live
     clearInterval(timbreInterval);
     timbreInterval = setInterval(() => {
-      const el = document.getElementById("timbreElapsed");
-      if (el) el.textContent = elapsedSince(active.dateDebut);
+      const e = el("timbreElapsed");
+      if (e) e.textContent = elapsedSince(active.dateDebut);
     }, 1000);
-    document.getElementById("timbreElapsed").textContent = elapsedSince(active.dateDebut);
+    const eEl = el("timbreElapsed");
+    if (eEl) eEl.textContent = elapsedSince(active.dateDebut);
   } else {
-    enCoursCard.style.display = "none";
-    statusDot.className = "timbre-status-dot";
-    statusText.textContent = "Aucune session en cours";
-    btnDebut.disabled = false;
-    btnDebut.style.opacity = "1";
-    btnFin.disabled = true;
-    btnFin.style.opacity = ".4";
+    if (enCours) enCours.style.display = "none";
+    if (statusDot) statusDot.className = "timbre-status-dot";
+    if (statusTxt) statusTxt.textContent = "Prêt — appuie sur Début";
+    if (btnDebut) { btnDebut.disabled = false; btnDebut.style.opacity = "1"; }
+    if (btnFin)   { btnFin.disabled   = true;  btnFin.style.opacity   = ".4"; }
     clearInterval(timbreInterval);
   }
 
-  // Tableau détaillé — groupé par jour
-  const histo = document.getElementById("timbreHistorique");
+  // Tableau groupé par jour
+  const histo = el("timbreHistorique");
+  if (!histo) return;
   if (!completed.length) {
     histo.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-clock"></i>Aucune entrée ce mois</p>`;
     return;
   }
 
-  // Grouper par date (YYYY-MM-DD)
+  // Grouper par jour
   const byDay = {};
   completed.forEach(t => {
     const day = t.dateDebut.slice(0,10);
@@ -3226,8 +3224,8 @@ function renderTimbrage() {
       <thead>
         <tr>
           <th>Date</th>
-          <th>Début</th>
-          <th>Fin</th>
+          <th style="text-align:center">Début</th>
+          <th style="text-align:center">Fin</th>
           <th style="text-align:right">Durée</th>
           <th>Notes</th>
           <th></th>
@@ -3236,32 +3234,37 @@ function renderTimbrage() {
       <tbody>
         ${Object.entries(byDay).sort((a,b) => b[0].localeCompare(a[0])).map(([day, entries]) => {
           const dayTotal = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
-          const dateLabel = new Date(day + "T12:00:00").toLocaleDateString("fr-CH", {
-            weekday:"long", day:"2-digit", month:"long"
-          });
-          const dayRows = entries.map(t => `
-            <tr>
-              <td class="td-date"></td>
-              <td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--navy)">
-                ${new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+          const dateLabel = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"long",day:"2-digit",month:"long"});
+          const sorted    = [...entries].sort((a,b) => a.dateDebut.localeCompare(b.dateDebut));
+
+          const dayRows = sorted.map((t, i) => `
+            <tr class="timbre-session-row">
+              <td class="td-date" style="padding-left:1.5rem;color:var(--text-light);font-size:.78rem">
+                ${i === 0 ? '<i class="fa-solid fa-angle-right" style="margin-right:.3rem;color:var(--border)"></i>' : '<i class="fa-solid fa-angle-right" style="margin-right:.3rem;color:var(--border)"></i>'}
+                Session ${i+1}
               </td>
-              <td style="font-family:'DM Mono',monospace;color:var(--text-light)">
-                ${t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : "—"}
+              <td style="text-align:center">
+                <span class="timbre-time-badge timbre-time-start">
+                  <i class="fa-solid fa-play" style="font-size:.6rem"></i>
+                  ${new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+                </span>
+              </td>
+              <td style="text-align:center">
+                <span class="timbre-time-badge timbre-time-end">
+                  <i class="fa-solid fa-stop" style="font-size:.6rem"></i>
+                  ${t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : "—"}
+                </span>
               </td>
               <td style="text-align:right">
-                <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blue)">
+                <span style="font-family:'DM Mono',monospace;font-weight:600;color:var(--blue);font-size:.88rem">
                   ${minutesToHM(t.dureeMin||0)}
                 </span>
               </td>
-              <td class="td-desc">${escHtml(t.notes||"")}</td>
+              <td class="td-desc" style="color:var(--text-light);font-size:.82rem">${escHtml(t.notes||"")}</td>
               <td>
                 <div style="display:flex;gap:.25rem">
-                  <button class="btn-icon edit" data-timbre-edit="${t.id}" title="Modifier les notes">
-                    <i class="fa-solid fa-pen"></i>
-                  </button>
-                  <button class="btn-icon delete" data-timbre-del="${t.id}" title="Supprimer">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
+                  <button class="btn-icon edit" data-timbre-edit="${t.id}" title="Modifier"><i class="fa-solid fa-pen"></i></button>
+                  <button class="btn-icon delete" data-timbre-del="${t.id}" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                 </div>
               </td>
             </tr>`).join("");
@@ -3269,7 +3272,11 @@ function renderTimbrage() {
           return `
             <tr class="timbre-day-header">
               <td colspan="3" style="font-weight:700;color:var(--navy);text-transform:capitalize">
+                <i class="fa-solid fa-calendar-day" style="color:var(--blue);margin-right:.5rem;font-size:.85rem"></i>
                 ${dateLabel}
+                <span style="font-size:.75rem;color:var(--text-light);font-weight:400;margin-left:.5rem">
+                  ${sorted.length} session${sorted.length>1?"s":""}
+                </span>
               </td>
               <td style="text-align:right">
                 <span class="timbre-day-total">${minutesToHM(dayTotal)}</span>
@@ -3281,10 +3288,10 @@ function renderTimbrage() {
       </tbody>
       <tfoot>
         <tr style="background:var(--navy)">
-          <td colspan="3" style="padding:.75rem 1.1rem;font-weight:700;color:#fff">
-            TOTAL DU MOIS
+          <td colspan="3" style="padding:.75rem 1.1rem;font-weight:700;color:#fff;font-size:.9rem">
+            TOTAL DU MOIS — ${jours} jour${jours>1?"s":" travaillé"}
           </td>
-          <td style="text-align:right;padding:.75rem 1.1rem;font-family:'DM Mono',monospace;font-weight:700;color:#7dd3fc;font-size:1rem">
+          <td style="text-align:right;padding:.75rem 1.1rem;font-family:'DM Mono',monospace;font-weight:700;color:#7dd3fc;font-size:1.05rem">
             ${minutesToHM(totalMin)}
           </td>
           <td colspan="2"></td>
@@ -3292,43 +3299,39 @@ function renderTimbrage() {
       </tfoot>
     </table>`;
 
-  // Événements
   histo.querySelectorAll("[data-timbre-edit]").forEach(btn => {
     btn.addEventListener("click", () => editTimbreNotes(btn.dataset.timbreEdit));
   });
   histo.querySelectorAll("[data-timbre-del]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Supprimer cette entrée de timbrage ?")) return;
+      if (!confirm("Supprimer cette session ?")) return;
       await fsDelete("timbrages", btn.dataset.timbreDel);
-      showToast("Entrée supprimée.", "info");
+      showToast("Session supprimée.", "info");
     });
   });
 }
 
-/* ---- Bouton DÉBUT ---- */
+/* ---- Bouton DÉBUT — plusieurs sessions par jour autorisées ---- */
 document.getElementById("btnTimbreDebut")?.addEventListener("click", async () => {
-  const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-
-  // Vérifier qu'il n'y a pas déjà une session active
+  // Vérifier qu'il n'y a pas déjà une session ouverte (sans fin)
   if (getActiveSession()) {
-    showToast("Une session est déjà en cours !", "error");
+    showToast("Clique sur Fin avant de démarrer une nouvelle session.", "error");
     return;
   }
 
-  const entry = {
-    id: uid(),
+  const now   = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
+  await fsAdd("timbrages", {
+    id:       uid(),
     dateDebut: now.toISOString(),
     dateFin:   null,
     dureeMin:  0,
     month,
     notes:     "",
-  };
+  });
 
-  await fsAdd("timbrages", entry);
-  showToast(`Début enregistré à ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})} ✓`, "success");
-
-  // Basculer sur le mois courant
+  showToast(`▶ Début à ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})} ✓`, "success");
   initTimbreMonth();
   renderTimbrage();
 });
