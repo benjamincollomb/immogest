@@ -3016,6 +3016,10 @@ function initTimbreMonth() {
           <div class="timbre-kpi-icon"><i class="fa-solid fa-clock"></i></div>
           <div><div class="timbre-kpi-value" id="timbreMoyenne">—</div><div class="timbre-kpi-label">Moyenne / jour</div></div>
         </div>
+        <div class="timbre-kpi" id="timbreSupCard" style="display:none;border-left:4px solid #16a34a">
+          <div class="timbre-kpi-icon" style="background:#f0fff4;color:#16a34a"><i class="fa-solid fa-arrow-trend-up"></i></div>
+          <div><div class="timbre-kpi-value" id="timbreSup" style="color:#16a34a">0h 00m</div><div class="timbre-kpi-label">Heures supp.</div></div>
+        </div>
         <div class="timbre-kpi timbre-kpi-navy" id="timbreEnCours" style="display:none">
           <div class="timbre-kpi-icon"><i class="fa-solid fa-play" style="color:#4ade80"></i></div>
           <div><div class="timbre-kpi-value" id="timbreElapsed" style="color:#4ade80">00:00</div><div class="timbre-kpi-label">En cours</div></div>
@@ -3146,6 +3150,9 @@ function elapsedSince(isoStart) {
 }
 
 /* ---- Session en cours (pas encore terminée) ---- */
+/* ---- Constante journée normale : 8h24 = 504 minutes ---- */
+const HEURES_JOUR_MIN = 8 * 60 + 24; // 504 minutes
+
 function getActiveSession() {
   return timbrages.find(t => t.dateDebut && !t.dateFin);
 }
@@ -3161,9 +3168,17 @@ function renderTimbrage() {
   });
   const completed = monthEntries.filter(t => t.dateFin);
 
-  // KPIs
+  // Grouper par jour (nécessaire pour les calculs)
+  const byDay = {};
+  completed.forEach(t => {
+    const day = t.dateDebut.slice(0,10);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
+  });
+
+  // KPIs de base
   const totalMin = completed.reduce((s,t) => s + (t.dureeMin || 0), 0);
-  const jours    = new Set(completed.map(t => t.dateDebut?.slice(0,10))).size;
+  const jours    = Object.keys(byDay).length;
   const moy      = jours ? minutesToHM(totalMin / jours) : "—";
 
   const el = id => document.getElementById(id);
@@ -3172,13 +3187,45 @@ function renderTimbrage() {
   if (el("timbreMoyenne")) el("timbreMoyenne").textContent = moy;
   if (el("timbreCount"))   el("timbreCount").textContent   = completed.length;
 
-  // Session active
+  // ---- Heures supplémentaires / manquantes ----
+  let totalSupMin = 0, totalManqMin = 0;
+  Object.values(byDay).forEach(entries => {
+    const dayMin = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
+    const diff   = dayMin - HEURES_JOUR_MIN;
+    if (diff > 0) totalSupMin  += diff;
+    else          totalManqMin += Math.abs(diff);
+  });
+  const soldeMin = totalSupMin - totalManqMin;
+
+  // Mettre à jour la carte heures supp/manq
+  const supCard = el("timbreSupCard");
+  const supEl   = el("timbreSup");
+  if (supCard) {
+    supCard.style.display = jours > 0 ? "flex" : "none";
+    const pos = soldeMin >= 0;
+    supCard.style.borderColor = pos ? "#16a34a" : "#dc2626";
+    const icon = supCard.querySelector(".timbre-kpi-icon");
+    if (icon) { icon.style.background = pos ? "#f0fff4" : "#fef2f2"; icon.style.color = pos ? "#16a34a" : "#dc2626"; }
+    const fa = supCard.querySelector(".fa-solid");
+    if (fa) fa.className = pos ? "fa-solid fa-arrow-trend-up" : "fa-solid fa-triangle-exclamation";
+    if (supEl) { supEl.textContent = (pos?"+":"-") + minutesToHM(Math.abs(soldeMin)); supEl.style.color = pos ? "#16a34a" : "#dc2626"; }
+    const lbl = supCard.querySelector(".timbre-kpi-label");
+    if (lbl) lbl.innerHTML = pos
+      ? `Heures supp. <span style="font-size:.65rem;opacity:.7">(base ${jours}×8h24)</span>`
+      : `Heures manq. <span style="font-size:.65rem;opacity:.7">(base ${jours}×8h24)</span>`;
+  }
+
+  // ---- Session active — chrono ----
   const active    = getActiveSession();
   const enCours   = el("timbreEnCours");
   const statusDot = el("timbreStatusDot");
   const statusTxt = el("timbreStatusText");
   const btnDebut  = el("btnTimbreDebut");
   const btnFin    = el("btnTimbreFin");
+
+  // Arrêter l'intervalle existant dans tous les cas avant de décider
+  clearInterval(timbreInterval);
+  timbreInterval = null;
 
   if (active) {
     if (enCours) enCours.style.display = "flex";
@@ -3187,20 +3234,19 @@ function renderTimbrage() {
     if (btnDebut) { btnDebut.disabled = true;  btnDebut.style.opacity = ".4"; }
     if (btnFin)   { btnFin.disabled   = false; btnFin.style.opacity   = "1"; }
 
-    clearInterval(timbreInterval);
-    timbreInterval = setInterval(() => {
+    // Démarrer un nouveau chrono
+    const updateElapsed = () => {
       const e = el("timbreElapsed");
       if (e) e.textContent = elapsedSince(active.dateDebut);
-    }, 1000);
-    const eEl = el("timbreElapsed");
-    if (eEl) eEl.textContent = elapsedSince(active.dateDebut);
+    };
+    updateElapsed();
+    timbreInterval = setInterval(updateElapsed, 1000);
   } else {
     if (enCours) enCours.style.display = "none";
     if (statusDot) statusDot.className = "timbre-status-dot";
     if (statusTxt) statusTxt.textContent = "Prêt — appuie sur Début";
     if (btnDebut) { btnDebut.disabled = false; btnDebut.style.opacity = "1"; }
     if (btnFin)   { btnFin.disabled   = true;  btnFin.style.opacity   = ".4"; }
-    clearInterval(timbreInterval);
   }
 
   // Tableau groupé par jour
@@ -3211,14 +3257,6 @@ function renderTimbrage() {
     return;
   }
 
-  // Grouper par jour
-  const byDay = {};
-  completed.forEach(t => {
-    const day = t.dateDebut.slice(0,10);
-    if (!byDay[day]) byDay[day] = [];
-    byDay[day].push(t);
-  });
-
   histo.innerHTML = `
     <table class="compta-table">
       <thead>
@@ -3226,7 +3264,8 @@ function renderTimbrage() {
           <th>Date</th>
           <th style="text-align:center">Début</th>
           <th style="text-align:center">Fin</th>
-          <th style="text-align:right">Durée</th>
+          <th style="text-align:right">Total jour</th>
+          <th style="text-align:right">H. supp.</th>
           <th>Notes</th>
           <th></th>
         </tr>
@@ -3234,13 +3273,20 @@ function renderTimbrage() {
       <tbody>
         ${Object.entries(byDay).sort((a,b) => b[0].localeCompare(a[0])).map(([day, entries]) => {
           const dayTotal = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
+          const dayDiff  = dayTotal - HEURES_JOUR_MIN;
           const dateLabel = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"long",day:"2-digit",month:"long"});
           const sorted    = [...entries].sort((a,b) => a.dateDebut.localeCompare(b.dateDebut));
 
+          const supBadge = dayDiff === 0
+            ? `<span style="color:var(--text-light);font-size:.75rem">—</span>`
+            : dayDiff > 0
+              ? `<span style="background:#f0fff4;color:#16a34a;font-family:'DM Mono',monospace;font-size:.75rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;border:1px solid #6ee7b7">+${minutesToHM(dayDiff)}</span>`
+              : `<span style="background:#fef2f2;color:#dc2626;font-family:'DM Mono',monospace;font-size:.75rem;font-weight:700;padding:.15rem .45rem;border-radius:5px;border:1px solid #fca5a5">−${minutesToHM(Math.abs(dayDiff))}</span>`;
+
           const dayRows = sorted.map((t, i) => `
             <tr class="timbre-session-row">
-              <td class="td-date" style="padding-left:1.5rem;color:var(--text-light);font-size:.78rem">
-                ${i === 0 ? '<i class="fa-solid fa-angle-right" style="margin-right:.3rem;color:var(--border)"></i>' : '<i class="fa-solid fa-angle-right" style="margin-right:.3rem;color:var(--border)"></i>'}
+              <td style="padding-left:1.5rem;color:var(--text-light);font-size:.78rem">
+                <i class="fa-solid fa-angle-right" style="margin-right:.3rem;color:var(--border)"></i>
                 Session ${i+1}
               </td>
               <td style="text-align:center">
@@ -3260,6 +3306,7 @@ function renderTimbrage() {
                   ${minutesToHM(t.dureeMin||0)}
                 </span>
               </td>
+              <td></td>
               <td class="td-desc" style="color:var(--text-light);font-size:.82rem">${escHtml(t.notes||"")}</td>
               <td>
                 <div style="display:flex;gap:.25rem">
@@ -3281,6 +3328,7 @@ function renderTimbrage() {
               <td style="text-align:right">
                 <span class="timbre-day-total">${minutesToHM(dayTotal)}</span>
               </td>
+              <td style="text-align:right">${supBadge}</td>
               <td colspan="2"></td>
             </tr>
             ${dayRows}`;
@@ -3289,10 +3337,13 @@ function renderTimbrage() {
       <tfoot>
         <tr style="background:var(--navy)">
           <td colspan="3" style="padding:.75rem 1.1rem;font-weight:700;color:#fff;font-size:.9rem">
-            TOTAL DU MOIS — ${jours} jour${jours>1?"s":" travaillé"}
+            TOTAL — ${jours} jour${jours>1?"s":" travaillé"} × 8h24 = ${minutesToHM(jours * HEURES_JOUR_MIN)}
           </td>
           <td style="text-align:right;padding:.75rem 1.1rem;font-family:'DM Mono',monospace;font-weight:700;color:#7dd3fc;font-size:1.05rem">
             ${minutesToHM(totalMin)}
+          </td>
+          <td style="text-align:right;padding:.75rem 1.1rem;font-family:'DM Mono',monospace;font-weight:700;font-size:.95rem;color:${soldeMin>=0?"#4ade80":"#f87171"}">
+            ${soldeMin>=0?"+":"−"}${minutesToHM(Math.abs(soldeMin))}
           </td>
           <td colspan="2"></td>
         </tr>
@@ -3341,18 +3392,33 @@ document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
   const active = getActiveSession();
   if (!active) { showToast("Aucune session en cours.", "error"); return; }
 
-  const now    = new Date();
-  const start  = new Date(active.dateDebut);
+  // ✅ Arrêter le chrono IMMÉDIATEMENT avant d'ouvrir la modale
+  clearInterval(timbreInterval);
+  timbreInterval = null;
+
+  // Mettre à jour l'UI instantanément sans attendre Firestore
+  const btnDebut = document.getElementById("btnTimbreDebut");
+  const btnFin   = document.getElementById("btnTimbreFin");
+  const enCours  = document.getElementById("timbreEnCours");
+  const statusDot = document.getElementById("timbreStatusDot");
+  const statusTxt = document.getElementById("timbreStatusText");
+  if (enCours)  enCours.style.display = "none";
+  if (statusDot) statusDot.className  = "timbre-status-dot";
+  if (statusTxt) statusTxt.textContent = "Enregistrement…";
+  if (btnDebut) { btnDebut.disabled = false; btnDebut.style.opacity = "1"; }
+  if (btnFin)   { btnFin.disabled   = true;  btnFin.style.opacity   = ".4"; }
+
+  const now      = new Date();
+  const start    = new Date(active.dateDebut);
   const dureeMin = Math.round((now - start) / 60000);
 
-  openModal("Fin de journée", `
-    <div style="text-align:center;margin-bottom:1.25rem">
-      <div style="font-size:2rem;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy)">
-        ${minutesToHM(dureeMin)}
-      </div>
-      <div style="color:var(--text-light);font-size:.85rem;margin-top:.3rem">
-        ${start.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
-        → ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+  openModal("Fin de session", `
+    <div style="text-align:center;margin-bottom:1.25rem;padding:1rem;background:var(--bg);border-radius:var(--radius-sm)">
+      <div style="font-size:2.2rem;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy)">${minutesToHM(dureeMin)}</div>
+      <div style="color:var(--text-light);font-size:.88rem;margin-top:.35rem">
+        <span style="color:#276749;font-weight:600">${start.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}</span>
+        &nbsp;→&nbsp;
+        <span style="color:#b91c1c;font-weight:600">${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}</span>
       </div>
     </div>
     <div class="form-group">
@@ -3366,7 +3432,7 @@ document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
       notes:    mval("fTimbreNotes"),
     });
     closeModal();
-    showToast(`Fin enregistrée — ${minutesToHM(dureeMin)} de travail ✓`, "success");
+    showToast(`✅ Session terminée — ${minutesToHM(dureeMin)}`, "success");
   });
 });
 
@@ -3480,6 +3546,7 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
     const sorted   = [...entries].sort((a,b) => a.dateDebut.localeCompare(b.dateDebut));
     const dayLabel = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"short",day:"2-digit",month:"short"});
     const dayTotal = sorted.reduce((s,t) => s+(t.dureeMin||0), 0);
+    const dayDiff  = dayTotal - HEURES_JOUR_MIN;
 
     sorted.forEach((t, i) => {
       rows.push({
@@ -3492,6 +3559,11 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
         notes:    t.notes || "",
         dayTotal: i === sorted.length-1 ? minutesToHM(dayTotal) : "",
         sessions: i === 0 ? sorted.length : null,
+        supLabel: i === sorted.length-1 ? (
+          dayDiff > 0 ? "+" + minutesToHM(dayDiff) :
+          dayDiff < 0 ? "−" + minutesToHM(Math.abs(dayDiff)) : "—"
+        ) : "",
+        supSign:  dayDiff > 0 ? "pos" : dayDiff < 0 ? "neg" : "zero",
       });
     });
   });
@@ -3502,12 +3574,13 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
     margin: { left:M, right:M },
     tableWidth: PAGE_W - 2*M,
     head: [[
-      { content:"Date",     styles:{cellWidth:38} },
-      { content:"Sessions", styles:{cellWidth:18, halign:"center"} },
-      { content:"Début",    styles:{cellWidth:20, halign:"center"} },
-      { content:"Fin",      styles:{cellWidth:20, halign:"center"} },
-      { content:"Durée",    styles:{cellWidth:22, halign:"center"} },
-      { content:"Total jour",styles:{cellWidth:25, halign:"center"} },
+      { content:"Date",     styles:{cellWidth:35} },
+      { content:"Sess.", styles:{cellWidth:12, halign:"center"} },
+      { content:"Début",    styles:{cellWidth:18, halign:"center"} },
+      { content:"Fin",      styles:{cellWidth:18, halign:"center"} },
+      { content:"Durée",    styles:{cellWidth:20, halign:"center"} },
+      { content:"Total jour",styles:{cellWidth:23, halign:"center"} },
+      { content:"H. supp.",  styles:{cellWidth:22, halign:"center"} },
       { content:"Notes",    styles:{cellWidth:"auto"} },
     ]],
     body: rows.map(r => [
@@ -3517,6 +3590,7 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
       r.fin,
       r.duree,
       r.dayTotal,
+      r.supLabel || "",
       r.notes,
     ]),
     styles: {
@@ -3541,15 +3615,17 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
       2: { halign:"center", fontStyle:"bold", textColor:[30,120,60] },
       3: { halign:"center", fontStyle:"bold", textColor:[180,30,30] },
       4: { halign:"center", fontStyle:"bold", textColor:[...BLUE] },
-      5: { halign:"center", fontStyle:"bold", textColor:[...NAVY],
-           fillColor:[220,230,248] },
-      6: { textColor:[100,116,148], fontStyle:"italic", fontSize:6.5 },
+      5: { halign:"center", fontStyle:"bold", textColor:[...NAVY], fillColor:[220,230,248] },
+      6: { halign:"center", fontStyle:"bold" }, // overtime — color set in didParseCell
+      7: { textColor:[100,116,148], fontStyle:"italic", fontSize:6.5 },
     },
     foot: [[
-      { content:"TOTAL DU MOIS", colSpan:3, styles:{halign:"left"} },
+      { content:"TOTAL — "+jours+"j × 8h24 = "+minutesToHM(jours*HEURES_JOUR_MIN), colSpan:3, styles:{halign:"left"} },
       "", "",
       { content:minutesToHM(totalMin), styles:{halign:"center",fontStyle:"bold",fontSize:9} },
-      { content:`${jours}j / ${totalSessions} sessions`, styles:{halign:"center"} },
+      { content:jours+"j / "+totalSessions+" sess.", styles:{halign:"center"} },
+      { content:(soldeMin>=0?"+":"−")+minutesToHM(Math.abs(soldeMin)),
+        styles:{halign:"center",fontStyle:"bold"} },
       "",
     ]],
     footStyles: {
@@ -3559,11 +3635,25 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
       fontSize:  8,
       cellPadding: 2.5,
     },
-    // Colorier les lignes de sous-total (total jour)
+    // Colorier la colonne total jour et heures supp
     didParseCell(data) {
-      if (data.section === "body" && data.column.index === 5 && data.cell.raw !== "") {
-        data.cell.styles.fillColor = [210,225,248];
-        data.cell.styles.fontStyle = "bold";
+      if (data.section === "body") {
+        // Colonne total jour (index 5) — fond bleu clair si non vide
+        if (data.column.index === 5 && data.cell.raw !== "") {
+          data.cell.styles.fillColor = [210,225,248];
+          data.cell.styles.fontStyle = "bold";
+        }
+        // Colonne heures supp (index 6) — vert si positif, rouge si négatif
+        if (data.column.index === 6 && data.cell.raw !== "" && data.cell.raw !== "—") {
+          const row = rows[data.row.index];
+          if (row && row.supSign === "pos") {
+            data.cell.styles.textColor = [22,163,74];
+            data.cell.styles.fillColor = [220,252,231];
+          } else if (row && row.supSign === "neg") {
+            data.cell.styles.textColor = [220,38,38];
+            data.cell.styles.fillColor = [254,226,226];
+          }
+        }
       }
     },
     // Ajouter le footer sur chaque page
