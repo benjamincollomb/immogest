@@ -2958,6 +2958,17 @@ function refreshDenonceFilters() {
 
 TAB_TITLES["timbre"] = "Timbrage";
 
+/* ---- Variables timbrage — déclarées AVANT ensureTimbreTab ---- */
+let timbrages      = [];
+let unsubTimbre    = null;
+let timbreMonth    = "";
+let timbreInterval = null;
+
+function initTimbreMonth() {
+  const now = new Date();
+  timbreMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+}
+
 /* ---- Injection garantie de l'onglet Timbrage si absent du HTML ---- */
 (function ensureTimbreTab() {
   // Si l'onglet n'existe pas (vieux index.html en cache), on l'injecte dynamiquement
@@ -3040,10 +3051,7 @@ TAB_TITLES["timbre"] = "Timbrage";
         </div>
       </div>`;
 
-      // Insérer avant le modal
-      const modal = document.getElementById("modalOverlay");
-      if (modal) mainWrapper.insertBefore(sec, modal);
-      else mainWrapper.appendChild(sec);
+      mainWrapper.appendChild(sec);
     }
 
     // Re-attacher les event listeners maintenant que les éléments existent
@@ -3096,16 +3104,8 @@ TAB_TITLES["timbre"] = "Timbrage";
   }
 })();
 
-let timbrages      = [];
-let unsubTimbre    = null;
-let timbreMonth    = "";       // "YYYY-MM" du mois affiché
-let timbreInterval = null;    // intervalle pour le chrono en cours
 
-/* ---- Init mois timbrage ---- */
-function initTimbreMonth() {
-  const now = new Date();
-  timbreMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-}
+/* initTimbreMonth défini plus haut */
 
 /* ---- Listener Firestore ---- */
 function startTimbreListener() {
