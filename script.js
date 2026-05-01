@@ -3427,43 +3427,47 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
   if (!monthEntries.length) { showToast("Aucune entrée à exporter.", "info"); return; }
 
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
-  const NAVY=[26,38,64], BLUE=[30,92,191], ORANGE=[232,106,26], LGRAY=[240,243,251];
-  const PAGE_W=210, M=15, TODAY=new Date().toLocaleDateString("fr-CH");
+
+  // ---- Format A4 paysage, marges serrées ----
+  const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
+  const NAVY=[26,38,64], BLUE=[30,92,191], ORANGE=[232,106,26], LGRAY=[240,243,251], WHITE=[255,255,255];
+  const PAGE_W=297, M=10, TODAY=new Date().toLocaleDateString("fr-CH");
   const MONTH_LABEL = formatMonthDisplay(timbreMonth);
 
-  // Header
-  doc.setFillColor(...NAVY); doc.rect(0,0,PAGE_W,32,"F");
-  doc.setFillColor(...ORANGE); doc.rect(0,32,PAGE_W,2.5,"F");
+  // ---- En-tête compact ----
+  doc.setFillColor(...NAVY); doc.rect(0,0,PAGE_W,20,"F");
+  doc.setFillColor(...ORANGE); doc.rect(0,20,PAGE_W,1.5,"F");
 
-  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
-  doc.text("ImmoGest — Feuille de timbrage", M, 14);
-  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(160,180,220);
-  doc.text(MONTH_LABEL, M, 23);
-  doc.text(`Généré le ${TODAY}`, PAGE_W-M, 23, {align:"right"});
+  doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.setTextColor(...WHITE);
+  doc.text("ImmoGest — Feuille de timbrage", M, 10);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(160,180,220);
+  doc.text(MONTH_LABEL, M, 17);
+  doc.text(`Généré le ${TODAY}`, PAGE_W-M, 17, {align:"right"});
 
-  // Résumé
+  // ---- Résumé sur 1 ligne ----
   const totalMin = monthEntries.reduce((s,t) => s + (t.dureeMin||0), 0);
   const jours    = new Set(monthEntries.map(t => t.dateDebut.slice(0,10))).size;
-  let y = 42;
+  const totalSessions = monthEntries.length;
+  let y = 25;
 
-  const pills = [
-    {l:"Total heures",       v:minutesToHM(totalMin), c:BLUE},
-    {l:"Jours travaillés",   v:`${jours} jour${jours>1?"s":""}`, c:ORANGE},
-    {l:"Moyenne / jour",     v:jours ? minutesToHM(totalMin/jours) : "—", c:[40,120,80]},
+  const summaryPills = [
+    { l:"Total heures",     v:minutesToHM(totalMin),                    c:BLUE   },
+    { l:"Jours travaillés", v:`${jours} jour${jours>1?"s":""}`,         c:ORANGE },
+    { l:"Sessions",         v:`${totalSessions} session${totalSessions>1?"s":""}`, c:[60,140,90] },
+    { l:"Moy / jour",       v:jours ? minutesToHM(totalMin/jours) : "—", c:[130,60,180] },
   ];
-  pills.forEach((p,i) => {
-    const x = M + i * ((PAGE_W-2*M)/3);
-    doc.setFillColor(...LGRAY); doc.roundedRect(x,y,56,18,2,2,"F");
-    doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(100,116,148);
-    doc.text(p.l, x+4, y+6.5);
-    doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(...p.c);
-    doc.text(p.v, x+4, y+15);
+  const pillW = (PAGE_W - 2*M) / summaryPills.length;
+  summaryPills.forEach((p, i) => {
+    const x = M + i * pillW;
+    doc.setFillColor(...LGRAY); doc.roundedRect(x, y, pillW-2, 11, 1.5, 1.5, "F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(5.5); doc.setTextColor(100,116,148);
+    doc.text(p.l, x+2.5, y+4);
+    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...p.c);
+    doc.text(p.v, x+2.5, y+9.5);
   });
-  y += 26;
+  y += 14;
 
-  // Tableau
-  const rows = [];
+  // ---- Construire les lignes du tableau ----
   const byDay = {};
   monthEntries.forEach(t => {
     const day = t.dateDebut.slice(0,10);
@@ -3471,65 +3475,124 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
     byDay[day].push(t);
   });
 
+  const rows = [];
   Object.entries(byDay).sort((a,b) => a[0].localeCompare(b[0])).forEach(([day, entries]) => {
-    const dl = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"long",day:"2-digit",month:"long"});
-    const dayTotal = entries.reduce((s,t) => s+(t.dureeMin||0), 0);
-    entries.forEach((t,i) => {
-      rows.push([
-        i === 0 ? dl.charAt(0).toUpperCase()+dl.slice(1) : "",
-        new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}),
-        t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : "—",
-        minutesToHM(t.dureeMin||0),
-        t.notes || "",
-      ]);
+    const sorted   = [...entries].sort((a,b) => a.dateDebut.localeCompare(b.dateDebut));
+    const dayLabel = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"short",day:"2-digit",month:"short"});
+    const dayTotal = sorted.reduce((s,t) => s+(t.dureeMin||0), 0);
+
+    sorted.forEach((t, i) => {
+      rows.push({
+        isDay:    i === 0,
+        isLast:   i === sorted.length - 1,
+        date:     i === 0 ? dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1) : "",
+        debut:    new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}),
+        fin:      t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : "—",
+        duree:    minutesToHM(t.dureeMin||0),
+        notes:    t.notes || "",
+        dayTotal: i === sorted.length-1 ? minutesToHM(dayTotal) : "",
+        sessions: i === 0 ? sorted.length : null,
+      });
     });
-    // Ligne total du jour
-    if (entries.length > 1) {
-      rows.push(["","","Sous-total",minutesToHM(dayTotal),"—"]);
-    }
   });
 
+  // ---- Tableau ultra-compact ----
   doc.autoTable({
-    startY: y, margin:{left:M,right:M},
-    head:[["Date","Début","Fin","Durée","Notes"]],
-    body: rows,
-    styles:{font:"helvetica",fontSize:9,cellPadding:3.5,textColor:[...NAVY]},
-    headStyles:{fillColor:[...BLUE],textColor:[255,255,255],fontStyle:"bold",fontSize:8.5},
-    alternateRowStyles:{fillColor:[...LGRAY]},
-    columnStyles:{
-      0:{cellWidth:55,fontStyle:"bold"},
-      1:{cellWidth:20,halign:"center"},
-      2:{cellWidth:20,halign:"center"},
-      3:{cellWidth:25,halign:"center",fontStyle:"bold",textColor:[...BLUE]},
-      4:{cellWidth:"auto"},
+    startY: y,
+    margin: { left:M, right:M },
+    tableWidth: PAGE_W - 2*M,
+    head: [[
+      { content:"Date",     styles:{cellWidth:38} },
+      { content:"Sessions", styles:{cellWidth:18, halign:"center"} },
+      { content:"Début",    styles:{cellWidth:20, halign:"center"} },
+      { content:"Fin",      styles:{cellWidth:20, halign:"center"} },
+      { content:"Durée",    styles:{cellWidth:22, halign:"center"} },
+      { content:"Total jour",styles:{cellWidth:25, halign:"center"} },
+      { content:"Notes",    styles:{cellWidth:"auto"} },
+    ]],
+    body: rows.map(r => [
+      r.date,
+      r.sessions !== null ? `${r.sessions}×` : "",
+      r.debut,
+      r.fin,
+      r.duree,
+      r.dayTotal,
+      r.notes,
+    ]),
+    styles: {
+      font:        "helvetica",
+      fontSize:    7,       // petit mais lisible
+      cellPadding: 1.8,     // serré
+      textColor:   [...NAVY],
+      lineColor:   [210,218,235],
+      lineWidth:   0.2,
     },
-    foot:[["","","TOTAL",minutesToHM(totalMin),""]],
-    footStyles:{fillColor:[...NAVY],textColor:[255,255,255],fontStyle:"bold",fontSize:9.5},
-    // Ligne de séparation pour les sous-totaux
+    headStyles: {
+      fillColor:   [...BLUE],
+      textColor:   [...WHITE],
+      fontStyle:   "bold",
+      fontSize:    6.5,
+      cellPadding: 2,
+    },
+    alternateRowStyles: { fillColor: [...LGRAY] },
+    columnStyles: {
+      0: { fontStyle:"bold", textColor:[...NAVY] },
+      1: { halign:"center", textColor:[100,100,130] },
+      2: { halign:"center", fontStyle:"bold", textColor:[30,120,60] },
+      3: { halign:"center", fontStyle:"bold", textColor:[180,30,30] },
+      4: { halign:"center", fontStyle:"bold", textColor:[...BLUE] },
+      5: { halign:"center", fontStyle:"bold", textColor:[...NAVY],
+           fillColor:[220,230,248] },
+      6: { textColor:[100,116,148], fontStyle:"italic", fontSize:6.5 },
+    },
+    foot: [[
+      { content:"TOTAL DU MOIS", colSpan:3, styles:{halign:"left"} },
+      "", "",
+      { content:minutesToHM(totalMin), styles:{halign:"center",fontStyle:"bold",fontSize:9} },
+      { content:`${jours}j / ${totalSessions} sessions`, styles:{halign:"center"} },
+      "",
+    ]],
+    footStyles: {
+      fillColor: [...NAVY],
+      textColor: [...WHITE],
+      fontStyle: "bold",
+      fontSize:  8,
+      cellPadding: 2.5,
+    },
+    // Colorier les lignes de sous-total (total jour)
     didParseCell(data) {
-      if (data.row.raw && data.row.raw[2] === "Sous-total") {
-        data.cell.styles.fillColor = [220,230,245];
-        data.cell.styles.textColor = [...BLUE];
+      if (data.section === "body" && data.column.index === 5 && data.cell.raw !== "") {
+        data.cell.styles.fillColor = [210,225,248];
         data.cell.styles.fontStyle = "bold";
       }
     },
+    // Ajouter le footer sur chaque page
+    didDrawPage(data) {
+      const ph = doc.internal.pageSize.height;
+      doc.setFillColor(...NAVY); doc.rect(0, ph-8, PAGE_W, 8, "F");
+      doc.setFont("helvetica","normal"); doc.setFontSize(6); doc.setTextColor(140,160,200);
+      doc.text(
+        `ImmoGest • Timbrage ${MONTH_LABEL} • Page ${doc.internal.getCurrentPageInfo().pageNumber} • Généré le ${TODAY}`,
+        PAGE_W/2, ph-3, {align:"center"}
+      );
+    },
   });
 
-  // Signature
-  const lastY = doc.lastAutoTable.finalY + 15;
-  doc.setDrawColor(...BLUE);
-  doc.setLineWidth(0.4);
-  doc.line(M, lastY+15, M+65, lastY+15);
-  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,116,148);
-  doc.text("Signature du concierge", M, lastY+20);
-  doc.line(PAGE_W-M-65, lastY+15, PAGE_W-M, lastY+15);
-  doc.text("Visa de la direction", PAGE_W-M-65, lastY+20);
+  // ---- Zone de signature (après le tableau) ----
+  const lastY = doc.lastAutoTable.finalY;
+  const ph    = doc.internal.pageSize.height;
+  const sigY  = lastY + 10;
 
-  // Footer
-  const ph = doc.internal.pageSize.height;
-  doc.setFillColor(...NAVY); doc.rect(0,ph-10,PAGE_W,10,"F");
-  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,200);
-  doc.text(`ImmoGest • Timbrage ${MONTH_LABEL} • Généré le ${TODAY}`, PAGE_W/2, ph-4, {align:"center"});
+  // Seulement si assez de place
+  if (sigY + 20 < ph - 10) {
+    doc.setDrawColor(...BLUE); doc.setLineWidth(0.3);
+    doc.line(M, sigY+12, M+60, sigY+12);
+    doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(100,116,148);
+    doc.text("Signature du concierge", M, sigY+16);
+
+    doc.line(PAGE_W-M-60, sigY+12, PAGE_W-M, sigY+12);
+    doc.text("Visa de la direction", PAGE_W-M-60, sigY+16);
+  }
 
   doc.save(`Timbrage_${MONTH_LABEL.replace(/ /g,"_")}.pdf`);
   showToast(`PDF "${MONTH_LABEL}" téléchargé !`, "success");
