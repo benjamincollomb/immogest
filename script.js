@@ -683,6 +683,7 @@ function switchTab(tabId){
   if(tabId==="spaces")    renderSpaces();
   if(tabId==="compta")    renderCompta();
   if(tabId==="denonce")   renderDenonciations();
+  if(tabId==="timbre")    renderTimbrage();
 }
 
 /* -------- Sidebar mobile -------- */
@@ -1386,11 +1387,13 @@ async function deleteApt(id){
    ============================================================ */
 async function initApp() {
   initCurrentMonth();
+  initTimbreMonth();
   await loadBuildings();
   startListeners();
   startComptaListener();
   startArchiveListener();
   startDenonceListener();
+  startTimbreListener();
   refreshBuildingSelects();
   refreshComptaBuildingSelect();
   refreshDenonceFilters();
@@ -2952,5 +2955,581 @@ function refreshDenonceFilters() {
     sel.appendChild(opt);
   });
 }
+
+TAB_TITLES["timbre"] = "Timbrage";
+
+/* ---- Injection garantie de l'onglet Timbrage si absent du HTML ---- */
+(function ensureTimbreTab() {
+  // Si l'onglet n'existe pas (vieux index.html en cache), on l'injecte dynamiquement
+  if (!document.getElementById("tab-timbre")) {
+    // Ajouter dans la sidebar
+    const nav = document.querySelector(".sidebar-nav");
+    if (nav) {
+      const li = document.createElement("a");
+      li.href = "#";
+      li.className = "nav-item";
+      li.dataset.tab = "timbre";
+      li.innerHTML = `<i class="fa-solid fa-clock"></i><span>Timbrage</span>`;
+      nav.insertBefore(li, nav.querySelector('[data-tab="denonce"]') || nav.lastElementChild);
+    }
+
+    // Ajouter la section tab
+    const mainWrapper = document.querySelector(".main-wrapper");
+    if (mainWrapper) {
+      const sec = document.createElement("section");
+      sec.className = "tab-content";
+      sec.id = "tab-timbre";
+      sec.innerHTML = `
+      <div class="timbre-top">
+        <div>
+          <h1 class="page-title">Timbrage</h1>
+          <p class="subtitle">Suivi des heures de travail</p>
+        </div>
+        <div class="month-nav">
+          <button class="month-nav-btn" id="timbrePrev"><i class="fa-solid fa-chevron-left"></i></button>
+          <div class="month-display" id="timbreMonthDisplay">—</div>
+          <button class="month-nav-btn" id="timbreNext"><i class="fa-solid fa-chevron-right"></i></button>
+          <button class="month-nav-btn month-today" id="timbreToday"><i class="fa-solid fa-calendar-day"></i></button>
+        </div>
+      </div>
+      <div class="timbre-kpi-row">
+        <div class="timbre-kpi timbre-kpi-blue">
+          <div class="timbre-kpi-icon"><i class="fa-solid fa-business-time"></i></div>
+          <div><div class="timbre-kpi-value" id="timbreTotal">0h 00m</div><div class="timbre-kpi-label">Heures ce mois</div></div>
+        </div>
+        <div class="timbre-kpi timbre-kpi-orange">
+          <div class="timbre-kpi-icon"><i class="fa-solid fa-calendar-day"></i></div>
+          <div><div class="timbre-kpi-value" id="timbreJours">0 jour</div><div class="timbre-kpi-label">Jours travaillés</div></div>
+        </div>
+        <div class="timbre-kpi timbre-kpi-green">
+          <div class="timbre-kpi-icon"><i class="fa-solid fa-clock"></i></div>
+          <div><div class="timbre-kpi-value" id="timbreMoyenne">—</div><div class="timbre-kpi-label">Moyenne / jour</div></div>
+        </div>
+        <div class="timbre-kpi timbre-kpi-navy" id="timbreEnCours" style="display:none">
+          <div class="timbre-kpi-icon"><i class="fa-solid fa-play" style="color:#4ade80"></i></div>
+          <div><div class="timbre-kpi-value" id="timbreElapsed" style="color:#4ade80">00:00</div><div class="timbre-kpi-label">En cours</div></div>
+        </div>
+      </div>
+      <div class="timbre-actions">
+        <button class="timbre-btn timbre-btn-start" id="btnTimbreDebut">
+          <div class="timbre-btn-icon"><i class="fa-solid fa-play"></i></div>
+          <div><div class="timbre-btn-label">Début</div><div class="timbre-btn-sub">Démarrer la journée</div></div>
+        </button>
+        <div class="timbre-status-card" id="timbreStatusCard">
+          <div class="timbre-status-dot" id="timbreStatusDot"></div>
+          <div class="timbre-status-text" id="timbreStatusText">Pas de session en cours</div>
+        </div>
+        <button class="timbre-btn timbre-btn-end" id="btnTimbreFin">
+          <div class="timbre-btn-icon"><i class="fa-solid fa-stop"></i></div>
+          <div><div class="timbre-btn-label">Fin</div><div class="timbre-btn-sub">Terminer la journée</div></div>
+        </button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+        <button class="btn btn-secondary" id="btnExportTimbrePDF">
+          <i class="fa-solid fa-file-pdf" style="color:#dc2626"></i> Exporter le mois en PDF
+        </button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <i class="fa-solid fa-table-list"></i>
+          <h2>Détail du mois</h2>
+          <span class="count-badge" id="timbreCount" style="background:var(--blue)">0</span>
+        </div>
+        <div id="timbreHistorique">
+          <p class="empty-msg"><i class="fa-solid fa-clock"></i>Aucune entrée ce mois</p>
+        </div>
+      </div>`;
+
+      // Insérer avant le modal
+      const modal = document.getElementById("modalOverlay");
+      if (modal) mainWrapper.insertBefore(sec, modal);
+      else mainWrapper.appendChild(sec);
+    }
+
+    // Re-attacher les event listeners maintenant que les éléments existent
+    document.getElementById("timbrePrev")?.addEventListener("click", () => changeTimbreMonth(-1));
+    document.getElementById("timbreNext")?.addEventListener("click", () => changeTimbreMonth(+1));
+    document.getElementById("timbreToday")?.addEventListener("click", () => { initTimbreMonth(); renderTimbrage(); });
+    document.getElementById("btnTimbreDebut")?.addEventListener("click", async () => {
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      if (getActiveSession()) { showToast("Une session est déjà en cours !", "error"); return; }
+      await fsAdd("timbrages", { id:uid(), dateDebut:now.toISOString(), dateFin:null, dureeMin:0, month, notes:"" });
+      showToast(`Début enregistré à ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})} ✓`, "success");
+      initTimbreMonth(); renderTimbrage();
+    });
+    document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
+      const active = getActiveSession();
+      if (!active) { showToast("Aucune session en cours.", "error"); return; }
+      const now = new Date();
+      const dureeMin = Math.round((now - new Date(active.dateDebut)) / 60000);
+      openModal("Fin de journée", `
+        <div style="text-align:center;margin-bottom:1.25rem">
+          <div style="font-size:2rem;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy)">${minutesToHM(dureeMin)}</div>
+          <div style="color:var(--text-light);font-size:.85rem;margin-top:.3rem">
+            ${new Date(active.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+            → ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notes (optionnel)</label>
+          <input id="fTimbreNotes" type="text" placeholder="Ex : Tonte, nettoyage hall…"/>
+        </div>`, async () => {
+        await fsUpdate("timbrages", active.id, { ...active, dateFin:now.toISOString(), dureeMin, notes:mval("fTimbreNotes") });
+        closeModal();
+        showToast(`Fin — ${minutesToHM(dureeMin)} ✓`, "success");
+      });
+    });
+    document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async () => {
+      showToast("Génération PDF…", "info");
+    });
+
+    // Re-attacher les nav items injectés
+    document.querySelectorAll(".nav-item[data-tab]").forEach(link => {
+      link.addEventListener("click", e => {
+        e.preventDefault();
+        const tabId = link.dataset.tab;
+        if(tabId) switchTab(tabId);
+        closeMobileSidebar();
+      });
+    });
+  }
+})();
+
+let timbrages      = [];
+let unsubTimbre    = null;
+let timbreMonth    = "";       // "YYYY-MM" du mois affiché
+let timbreInterval = null;    // intervalle pour le chrono en cours
+
+/* ---- Init mois timbrage ---- */
+function initTimbreMonth() {
+  const now = new Date();
+  timbreMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+}
+
+/* ---- Listener Firestore ---- */
+function startTimbreListener() {
+  if (unsubTimbre) unsubTimbre();
+  unsubTimbre = col("timbrages").onSnapshot(snap => {
+    timbrages = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => new Date(b.dateDebut) - new Date(a.dateDebut));
+    if (document.getElementById("tab-timbre").classList.contains("active")) {
+      renderTimbrage();
+    }
+  }, err => { if(err.code==="permission-denied") showFirestorePermissionWarning(); });
+}
+
+/* ---- Navigation mois ---- */
+function changeTimbreMonth(delta) {
+  const [y,m] = timbreMonth.split("-").map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  timbreMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  renderTimbrage();
+}
+document.getElementById("timbrePrev")?.addEventListener("click", () => changeTimbreMonth(-1));
+document.getElementById("timbreNext")?.addEventListener("click", () => changeTimbreMonth(+1));
+document.getElementById("timbreToday")?.addEventListener("click", () => { initTimbreMonth(); renderTimbrage(); });
+
+/* ---- Utilitaires durée ---- */
+function minutesToHM(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return `${h}h ${String(m).padStart(2,"0")}m`;
+}
+function elapsedSince(isoStart) {
+  const diff = Math.floor((Date.now() - new Date(isoStart)) / 1000);
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+/* ---- Session en cours (pas encore terminée) ---- */
+function getActiveSession() {
+  return timbrages.find(t => t.dateDebut && !t.dateFin);
+}
+
+/* ---- Rendu principal ---- */
+function renderTimbrage() {
+  document.getElementById("timbreMonthDisplay").textContent = formatMonthDisplay(timbreMonth);
+
+  // Filtrer les entrées du mois affiché (terminées seulement pour les stats)
+  const monthEntries = timbrages.filter(t => {
+    const m = t.month || (t.dateDebut ? t.dateDebut.slice(0,7) : "");
+    return m === timbreMonth;
+  });
+  const completed = monthEntries.filter(t => t.dateFin);
+
+  // KPIs
+  const totalMin = completed.reduce((s,t) => s + (t.dureeMin || 0), 0);
+  const jours    = new Set(completed.map(t => t.dateDebut?.slice(0,10))).size;
+  const moy      = jours ? minutesToHM(totalMin / jours) : "—";
+
+  document.getElementById("timbreTotal").textContent   = minutesToHM(totalMin);
+  document.getElementById("timbreJours").textContent   = jours + (jours <= 1 ? " jour" : " jours");
+  document.getElementById("timbreMoyenne").textContent = moy;
+  document.getElementById("timbreCount").textContent   = completed.length;
+
+  // Session active
+  const active = getActiveSession();
+  const enCoursCard = document.getElementById("timbreEnCours");
+  const statusDot   = document.getElementById("timbreStatusDot");
+  const statusText  = document.getElementById("timbreStatusText");
+  const btnDebut    = document.getElementById("btnTimbreDebut");
+  const btnFin      = document.getElementById("btnTimbreFin");
+
+  if (active) {
+    enCoursCard.style.display = "flex";
+    statusDot.className = "timbre-status-dot active";
+    statusText.textContent = `En cours depuis ${new Date(active.dateDebut).toLocaleTimeString("fr-CH", {hour:"2-digit",minute:"2-digit"})}`;
+    btnDebut.disabled = true;
+    btnDebut.style.opacity = ".4";
+    btnFin.disabled = false;
+    btnFin.style.opacity = "1";
+
+    // Chrono live
+    clearInterval(timbreInterval);
+    timbreInterval = setInterval(() => {
+      const el = document.getElementById("timbreElapsed");
+      if (el) el.textContent = elapsedSince(active.dateDebut);
+    }, 1000);
+    document.getElementById("timbreElapsed").textContent = elapsedSince(active.dateDebut);
+  } else {
+    enCoursCard.style.display = "none";
+    statusDot.className = "timbre-status-dot";
+    statusText.textContent = "Aucune session en cours";
+    btnDebut.disabled = false;
+    btnDebut.style.opacity = "1";
+    btnFin.disabled = true;
+    btnFin.style.opacity = ".4";
+    clearInterval(timbreInterval);
+  }
+
+  // Tableau détaillé — groupé par jour
+  const histo = document.getElementById("timbreHistorique");
+  if (!completed.length) {
+    histo.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-clock"></i>Aucune entrée ce mois</p>`;
+    return;
+  }
+
+  // Grouper par date (YYYY-MM-DD)
+  const byDay = {};
+  completed.forEach(t => {
+    const day = t.dateDebut.slice(0,10);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
+  });
+
+  histo.innerHTML = `
+    <table class="compta-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Début</th>
+          <th>Fin</th>
+          <th style="text-align:right">Durée</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.entries(byDay).sort((a,b) => b[0].localeCompare(a[0])).map(([day, entries]) => {
+          const dayTotal = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
+          const dateLabel = new Date(day + "T12:00:00").toLocaleDateString("fr-CH", {
+            weekday:"long", day:"2-digit", month:"long"
+          });
+          const dayRows = entries.map(t => `
+            <tr>
+              <td class="td-date"></td>
+              <td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--navy)">
+                ${new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+              </td>
+              <td style="font-family:'DM Mono',monospace;color:var(--text-light)">
+                ${t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : "—"}
+              </td>
+              <td style="text-align:right">
+                <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--blue)">
+                  ${minutesToHM(t.dureeMin||0)}
+                </span>
+              </td>
+              <td class="td-desc">${escHtml(t.notes||"")}</td>
+              <td>
+                <div style="display:flex;gap:.25rem">
+                  <button class="btn-icon edit" data-timbre-edit="${t.id}" title="Modifier les notes">
+                    <i class="fa-solid fa-pen"></i>
+                  </button>
+                  <button class="btn-icon delete" data-timbre-del="${t.id}" title="Supprimer">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>`).join("");
+
+          return `
+            <tr class="timbre-day-header">
+              <td colspan="3" style="font-weight:700;color:var(--navy);text-transform:capitalize">
+                ${dateLabel}
+              </td>
+              <td style="text-align:right">
+                <span class="timbre-day-total">${minutesToHM(dayTotal)}</span>
+              </td>
+              <td colspan="2"></td>
+            </tr>
+            ${dayRows}`;
+        }).join("")}
+      </tbody>
+      <tfoot>
+        <tr style="background:var(--navy)">
+          <td colspan="3" style="padding:.75rem 1.1rem;font-weight:700;color:#fff">
+            TOTAL DU MOIS
+          </td>
+          <td style="text-align:right;padding:.75rem 1.1rem;font-family:'DM Mono',monospace;font-weight:700;color:#7dd3fc;font-size:1rem">
+            ${minutesToHM(totalMin)}
+          </td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  // Événements
+  histo.querySelectorAll("[data-timbre-edit]").forEach(btn => {
+    btn.addEventListener("click", () => editTimbreNotes(btn.dataset.timbreEdit));
+  });
+  histo.querySelectorAll("[data-timbre-del]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Supprimer cette entrée de timbrage ?")) return;
+      await fsDelete("timbrages", btn.dataset.timbreDel);
+      showToast("Entrée supprimée.", "info");
+    });
+  });
+}
+
+/* ---- Bouton DÉBUT ---- */
+document.getElementById("btnTimbreDebut")?.addEventListener("click", async () => {
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
+  // Vérifier qu'il n'y a pas déjà une session active
+  if (getActiveSession()) {
+    showToast("Une session est déjà en cours !", "error");
+    return;
+  }
+
+  const entry = {
+    id: uid(),
+    dateDebut: now.toISOString(),
+    dateFin:   null,
+    dureeMin:  0,
+    month,
+    notes:     "",
+  };
+
+  await fsAdd("timbrages", entry);
+  showToast(`Début enregistré à ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})} ✓`, "success");
+
+  // Basculer sur le mois courant
+  initTimbreMonth();
+  renderTimbrage();
+});
+
+/* ---- Bouton FIN ---- */
+document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
+  const active = getActiveSession();
+  if (!active) { showToast("Aucune session en cours.", "error"); return; }
+
+  const now    = new Date();
+  const start  = new Date(active.dateDebut);
+  const dureeMin = Math.round((now - start) / 60000);
+
+  openModal("Fin de journée", `
+    <div style="text-align:center;margin-bottom:1.25rem">
+      <div style="font-size:2rem;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy)">
+        ${minutesToHM(dureeMin)}
+      </div>
+      <div style="color:var(--text-light);font-size:.85rem;margin-top:.3rem">
+        ${start.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+        → ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes (optionnel)</label>
+      <input id="fTimbreNotes" type="text" placeholder="Ex : Tonte, nettoyage hall, livraison…"/>
+    </div>`, async () => {
+    await fsUpdate("timbrages", active.id, {
+      ...active,
+      dateFin:  now.toISOString(),
+      dureeMin,
+      notes:    mval("fTimbreNotes"),
+    });
+    closeModal();
+    showToast(`Fin enregistrée — ${minutesToHM(dureeMin)} de travail ✓`, "success");
+  });
+});
+
+/* ---- Modifier les notes d'une entrée ---- */
+function editTimbreNotes(id) {
+  const t = timbrages.find(t => t.id === id);
+  if (!t) return;
+  openModal("Modifier les notes", `
+    <div class="form-group">
+      <label>Notes</label>
+      <input id="fTimbreNotes" type="text" value="${escHtml(t.notes||"")}"
+             placeholder="Description du travail effectué…"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Heure de début</label>
+        <input id="fTimbreStart" type="time"
+               value="${new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}"/>
+      </div>
+      <div class="form-group">
+        <label>Heure de fin</label>
+        <input id="fTimbreEnd" type="time"
+               value="${t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : ""}"/>
+      </div>
+    </div>`, async () => {
+
+    // Recalculer avec les heures modifiées
+    const startStr = mval("fTimbreStart");
+    const endStr   = mval("fTimbreEnd");
+    const baseDate = t.dateDebut.slice(0,10);
+
+    let newStart = t.dateDebut, newFin = t.dateFin, newDuree = t.dureeMin;
+    if (startStr) {
+      newStart = new Date(`${baseDate}T${startStr}:00`).toISOString();
+    }
+    if (endStr) {
+      newFin   = new Date(`${baseDate}T${endStr}:00`).toISOString();
+      newDuree = Math.round((new Date(newFin) - new Date(newStart)) / 60000);
+    }
+
+    await fsUpdate("timbrages", id, {
+      ...t,
+      notes:     mval("fTimbreNotes"),
+      dateDebut: newStart,
+      dateFin:   newFin,
+      dureeMin:  newDuree > 0 ? newDuree : t.dureeMin,
+    });
+    closeModal();
+    showToast("Entrée mise à jour.", "success");
+  });
+}
+
+/* ---- Export PDF mensuel timbrage ---- */
+document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async () => {
+  if (typeof window.jspdf === "undefined") { showToast("PDF en cours de chargement, réessaie.", "info"); return; }
+
+  const monthEntries = timbrages.filter(t => (t.month || t.dateDebut?.slice(0,7)) === timbreMonth && t.dateFin);
+  if (!monthEntries.length) { showToast("Aucune entrée à exporter.", "info"); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+  const NAVY=[26,38,64], BLUE=[30,92,191], ORANGE=[232,106,26], LGRAY=[240,243,251];
+  const PAGE_W=210, M=15, TODAY=new Date().toLocaleDateString("fr-CH");
+  const MONTH_LABEL = formatMonthDisplay(timbreMonth);
+
+  // Header
+  doc.setFillColor(...NAVY); doc.rect(0,0,PAGE_W,32,"F");
+  doc.setFillColor(...ORANGE); doc.rect(0,32,PAGE_W,2.5,"F");
+
+  doc.setFont("helvetica","bold"); doc.setFontSize(16); doc.setTextColor(255,255,255);
+  doc.text("ImmoGest — Feuille de timbrage", M, 14);
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(160,180,220);
+  doc.text(MONTH_LABEL, M, 23);
+  doc.text(`Généré le ${TODAY}`, PAGE_W-M, 23, {align:"right"});
+
+  // Résumé
+  const totalMin = monthEntries.reduce((s,t) => s + (t.dureeMin||0), 0);
+  const jours    = new Set(monthEntries.map(t => t.dateDebut.slice(0,10))).size;
+  let y = 42;
+
+  const pills = [
+    {l:"Total heures",       v:minutesToHM(totalMin), c:BLUE},
+    {l:"Jours travaillés",   v:`${jours} jour${jours>1?"s":""}`, c:ORANGE},
+    {l:"Moyenne / jour",     v:jours ? minutesToHM(totalMin/jours) : "—", c:[40,120,80]},
+  ];
+  pills.forEach((p,i) => {
+    const x = M + i * ((PAGE_W-2*M)/3);
+    doc.setFillColor(...LGRAY); doc.roundedRect(x,y,56,18,2,2,"F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(100,116,148);
+    doc.text(p.l, x+4, y+6.5);
+    doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(...p.c);
+    doc.text(p.v, x+4, y+15);
+  });
+  y += 26;
+
+  // Tableau
+  const rows = [];
+  const byDay = {};
+  monthEntries.forEach(t => {
+    const day = t.dateDebut.slice(0,10);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
+  });
+
+  Object.entries(byDay).sort((a,b) => a[0].localeCompare(b[0])).forEach(([day, entries]) => {
+    const dl = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"long",day:"2-digit",month:"long"});
+    const dayTotal = entries.reduce((s,t) => s+(t.dureeMin||0), 0);
+    entries.forEach((t,i) => {
+      rows.push([
+        i === 0 ? dl.charAt(0).toUpperCase()+dl.slice(1) : "",
+        new Date(t.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}),
+        t.dateFin ? new Date(t.dateFin).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"}) : "—",
+        minutesToHM(t.dureeMin||0),
+        t.notes || "",
+      ]);
+    });
+    // Ligne total du jour
+    if (entries.length > 1) {
+      rows.push(["","","Sous-total",minutesToHM(dayTotal),"—"]);
+    }
+  });
+
+  doc.autoTable({
+    startY: y, margin:{left:M,right:M},
+    head:[["Date","Début","Fin","Durée","Notes"]],
+    body: rows,
+    styles:{font:"helvetica",fontSize:9,cellPadding:3.5,textColor:[...NAVY]},
+    headStyles:{fillColor:[...BLUE],textColor:[255,255,255],fontStyle:"bold",fontSize:8.5},
+    alternateRowStyles:{fillColor:[...LGRAY]},
+    columnStyles:{
+      0:{cellWidth:55,fontStyle:"bold"},
+      1:{cellWidth:20,halign:"center"},
+      2:{cellWidth:20,halign:"center"},
+      3:{cellWidth:25,halign:"center",fontStyle:"bold",textColor:[...BLUE]},
+      4:{cellWidth:"auto"},
+    },
+    foot:[["","","TOTAL",minutesToHM(totalMin),""]],
+    footStyles:{fillColor:[...NAVY],textColor:[255,255,255],fontStyle:"bold",fontSize:9.5},
+    // Ligne de séparation pour les sous-totaux
+    didParseCell(data) {
+      if (data.row.raw && data.row.raw[2] === "Sous-total") {
+        data.cell.styles.fillColor = [220,230,245];
+        data.cell.styles.textColor = [...BLUE];
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+  });
+
+  // Signature
+  const lastY = doc.lastAutoTable.finalY + 15;
+  doc.setDrawColor(...BLUE);
+  doc.setLineWidth(0.4);
+  doc.line(M, lastY+15, M+65, lastY+15);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(100,116,148);
+  doc.text("Signature du concierge", M, lastY+20);
+  doc.line(PAGE_W-M-65, lastY+15, PAGE_W-M, lastY+15);
+  doc.text("Visa de la direction", PAGE_W-M-65, lastY+20);
+
+  // Footer
+  const ph = doc.internal.pageSize.height;
+  doc.setFillColor(...NAVY); doc.rect(0,ph-10,PAGE_W,10,"F");
+  doc.setFont("helvetica","normal"); doc.setFontSize(7); doc.setTextColor(140,160,200);
+  doc.text(`ImmoGest • Timbrage ${MONTH_LABEL} • Généré le ${TODAY}`, PAGE_W/2, ph-4, {align:"center"});
+
+  doc.save(`Timbrage_${MONTH_LABEL.replace(/ /g,"_")}.pdf`);
+  showToast(`PDF "${MONTH_LABEL}" téléchargé !`, "success");
+});
 
 })();
