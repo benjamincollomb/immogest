@@ -3059,22 +3059,6 @@ function initTimbreMonth() {
       mainWrapper.appendChild(sec);
     }
 
-    // Re-attacher les event listeners maintenant que les éléments existent
-    document.getElementById("timbrePrev")?.addEventListener("click", () => changeTimbreMonth(-1));
-    document.getElementById("timbreNext")?.addEventListener("click", () => changeTimbreMonth(+1));
-    document.getElementById("timbreToday")?.addEventListener("click", () => { initTimbreMonth(); renderTimbrage(); });
-    document.getElementById("btnTimbreDebut")?.addEventListener("click", async () => {
-      const now = new Date();
-      const month = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-      if (getActiveSession()) { showToast("Une session est déjà en cours !", "error"); return; }
-      await fsAdd("timbrages", { id:uid(), dateDebut:now.toISOString(), dateFin:null, dureeMin:0, month, notes:"" });
-      showToast(`Début enregistré à ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})} ✓`, "success");
-      initTimbreMonth(); renderTimbrage();
-    });
-    document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async () => {
-      showToast("Génération PDF…", "info");
-    });
-
     // Re-attacher les nav items injectés
     document.querySelectorAll(".nav-item[data-tab]").forEach(link => {
       link.addEventListener("click", e => {
