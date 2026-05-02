@@ -3662,13 +3662,51 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
     },
   });
 
-  // ---- Zone de signature (après le tableau) ----
+  // ---- Zone de signature + solde heures ----
   const lastY = doc.lastAutoTable.finalY;
   const ph    = doc.internal.pageSize.height;
-  const sigY  = lastY + 10;
+  let   sigY  = lastY + 8;
 
-  // Seulement si assez de place
-  if (sigY + 20 < ph - 10) {
+  // ---- Boîte récapitulatif du solde ----
+  const GREEN = [22,163,74], RED = [220,38,38];
+  const soldePos  = soldeMin >= 0;
+  const soldeColor = soldePos ? GREEN : RED;
+  const soldeBg    = soldePos ? [220,252,231] : [254,226,226];
+  const soldeBorder= soldePos ? [134,239,172] : [252,165,165];
+
+  // Fond de la boîte
+  doc.setFillColor(...soldeBg);
+  doc.setDrawColor(...soldeBorder);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(M, sigY, PAGE_W - 2*M, 18, 2, 2, "FD");
+
+  // Titre
+  doc.setFont("helvetica","bold"); doc.setFontSize(7); doc.setTextColor(80,80,100);
+  doc.text("BILAN DES HEURES — " + MONTH_LABEL.toUpperCase(), M+4, sigY+5);
+
+  // Données sur une ligne
+  const bilanItems = [
+    { l:"Heures effectuées",  v: minutesToHM(totalMin),               c:[...NAVY]       },
+    { l:"Heures prévues",     v: minutesToHM(jours * HEURES_JOUR_MIN), c:[80,80,120]     },
+    { l:"Heures supp.",       v: "+" + minutesToHM(_supMin),           c:[22,163,74]     },
+    { l:"Heures manq.",       v: "−" + minutesToHM(_manqMin),          c:[220,38,38]     },
+    { l:"SOLDE NET",          v: (soldePos?"+":"−") + minutesToHM(Math.abs(soldeMin)), c:[...soldeColor], bold:true },
+  ];
+  const itemW = (PAGE_W - 2*M - 8) / bilanItems.length;
+  bilanItems.forEach((item, i) => {
+    const x = M + 4 + i * itemW;
+    doc.setFont("helvetica","normal"); doc.setFontSize(6); doc.setTextColor(100,116,148);
+    doc.text(item.l, x, sigY+10);
+    doc.setFont("helvetica", item.bold ? "bold" : "bold");
+    doc.setFontSize(item.bold ? 8.5 : 7.5);
+    doc.setTextColor(...item.c);
+    doc.text(item.v, x, sigY+16);
+  });
+
+  sigY += 24;
+
+  // ---- Signatures ----
+  if (sigY + 18 < ph - 10) {
     doc.setDrawColor(...BLUE); doc.setLineWidth(0.3);
     doc.line(M, sigY+12, M+60, sigY+12);
     doc.setFont("helvetica","normal"); doc.setFontSize(6.5); doc.setTextColor(100,116,148);
