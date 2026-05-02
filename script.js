@@ -2963,6 +2963,7 @@ let timbrages      = [];
 let unsubTimbre    = null;
 let timbreMonth    = "";
 let timbreInterval = null;
+let pendingFinId   = null;  // ID session en cours de fermeture
 
 function initTimbreMonth() {
   const now = new Date();
@@ -3070,28 +3071,6 @@ function initTimbreMonth() {
       showToast(`Début enregistré à ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})} ✓`, "success");
       initTimbreMonth(); renderTimbrage();
     });
-    document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
-      const active = getActiveSession();
-      if (!active) { showToast("Aucune session en cours.", "error"); return; }
-      const now = new Date();
-      const dureeMin = Math.round((now - new Date(active.dateDebut)) / 60000);
-      openModal("Fin de journée", `
-        <div style="text-align:center;margin-bottom:1.25rem">
-          <div style="font-size:2rem;font-weight:700;font-family:'DM Mono',monospace;color:var(--navy)">${minutesToHM(dureeMin)}</div>
-          <div style="color:var(--text-light);font-size:.85rem;margin-top:.3rem">
-            ${new Date(active.dateDebut).toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
-            → ${now.toLocaleTimeString("fr-CH",{hour:"2-digit",minute:"2-digit"})}
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Notes (optionnel)</label>
-          <input id="fTimbreNotes" type="text" placeholder="Ex : Tonte, nettoyage hall…"/>
-        </div>`, async () => {
-        await fsUpdate("timbrages", active.id, { ...active, dateFin:now.toISOString(), dureeMin, notes:mval("fTimbreNotes") });
-        closeModal();
-        showToast(`Fin — ${minutesToHM(dureeMin)} ✓`, "success");
-      });
-    });
     document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async () => {
       showToast("Génération PDF…", "info");
     });
@@ -3154,7 +3133,7 @@ function elapsedSince(isoStart) {
 const HEURES_JOUR_MIN = 8 * 60 + 24; // 504 minutes
 
 function getActiveSession() {
-  return timbrages.find(t => t.dateDebut && !t.dateFin);
+  return timbrages.find(t => t.dateDebut && !t.dateFin && t.id !== pendingFinId);
 }
 
 /* ---- Rendu principal ---- */
@@ -3392,21 +3371,25 @@ document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
   const active = getActiveSession();
   if (!active) { showToast("Aucune session en cours.", "error"); return; }
 
-  // ✅ Arrêter le chrono IMMÉDIATEMENT avant d'ouvrir la modale
+  // ✅ Marquer la session comme "en cours de fermeture" IMMÉDIATEMENT
+  // Cela empêche le listener Firestore de redémarrer le chrono
+  pendingFinId = active.id;
+
+  // Arrêter le chrono immédiatement
   clearInterval(timbreInterval);
   timbreInterval = null;
 
-  // Mettre à jour l'UI instantanément sans attendre Firestore
-  const btnDebut = document.getElementById("btnTimbreDebut");
-  const btnFin   = document.getElementById("btnTimbreFin");
-  const enCours  = document.getElementById("timbreEnCours");
+  // Mettre à jour l'UI sans attendre Firestore
+  const btnDebut  = document.getElementById("btnTimbreDebut");
+  const btnFin    = document.getElementById("btnTimbreFin");
+  const enCours   = document.getElementById("timbreEnCours");
   const statusDot = document.getElementById("timbreStatusDot");
   const statusTxt = document.getElementById("timbreStatusText");
-  if (enCours)  enCours.style.display = "none";
-  if (statusDot) statusDot.className  = "timbre-status-dot";
-  if (statusTxt) statusTxt.textContent = "Enregistrement…";
-  if (btnDebut) { btnDebut.disabled = false; btnDebut.style.opacity = "1"; }
-  if (btnFin)   { btnFin.disabled   = true;  btnFin.style.opacity   = ".4"; }
+  if (enCours)   enCours.style.display   = "none";
+  if (statusDot) statusDot.className     = "timbre-status-dot";
+  if (statusTxt) statusTxt.textContent   = "Enregistrement…";
+  if (btnDebut)  { btnDebut.disabled = false; btnDebut.style.opacity = "1"; }
+  if (btnFin)    { btnFin.disabled   = true;  btnFin.style.opacity   = ".4"; }
 
   const now      = new Date();
   const start    = new Date(active.dateDebut);
@@ -3424,16 +3407,33 @@ document.getElementById("btnTimbreFin")?.addEventListener("click", async () => {
     <div class="form-group">
       <label>Notes (optionnel)</label>
       <input id="fTimbreNotes" type="text" placeholder="Ex : Tonte, nettoyage hall, livraison…"/>
-    </div>`, async () => {
-    await fsUpdate("timbrages", active.id, {
-      ...active,
-      dateFin:  now.toISOString(),
-      dureeMin,
-      notes:    mval("fTimbreNotes"),
-    });
-    closeModal();
-    showToast(`✅ Session terminée — ${minutesToHM(dureeMin)}`, "success");
-  });
+    </div>`,
+    // ---- Callback Enregistrer ----
+    async () => {
+      await fsUpdate("timbrages", active.id, {
+        ...active,
+        dateFin:  now.toISOString(),
+        dureeMin,
+        notes:    mval("fTimbreNotes"),
+      });
+      pendingFinId = null; // Libérer le verrou après sauvegarde
+      closeModal();
+      showToast(`✅ Session terminée — ${minutesToHM(dureeMin)}`, "success");
+    }
+  );
+
+  // ---- Si l'utilisateur annule la modale : rétablir la session active ----
+  // On écoute la fermeture de la modale via les boutons Annuler/X
+  const restoreOnCancel = () => {
+    // Vérifier si la session est toujours ouverte (pendingFinId encore actif)
+    if (pendingFinId === active.id) {
+      pendingFinId = null; // Libérer le verrou
+      renderTimbrage();    // Redémarrer le chrono
+    }
+  };
+
+  document.getElementById("modalCancel")?.addEventListener("click",  restoreOnCancel, { once: true });
+  document.getElementById("modalClose")?.addEventListener("click",   restoreOnCancel, { once: true });
 });
 
 /* ---- Modifier les notes d'une entrée ---- */
