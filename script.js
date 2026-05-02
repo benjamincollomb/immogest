@@ -3514,6 +3514,16 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
   const totalMin = monthEntries.reduce((s,t) => s + (t.dureeMin||0), 0);
   const jours    = new Set(monthEntries.map(t => t.dateDebut.slice(0,10))).size;
   const totalSessions = monthEntries.length;
+  // Calcul du solde heures supp/manq pour le PDF
+  let _supMin = 0, _manqMin = 0;
+  const _byDayPdf = {};
+  monthEntries.forEach(t => { const d=t.dateDebut.slice(0,10); if(!_byDayPdf[d])_byDayPdf[d]=[]; _byDayPdf[d].push(t); });
+  Object.values(_byDayPdf).forEach(entries => {
+    const dayMin = entries.reduce((s,t) => s+(t.dureeMin||0), 0);
+    const diff = dayMin - HEURES_JOUR_MIN;
+    if (diff > 0) _supMin += diff; else _manqMin += Math.abs(diff);
+  });
+  const soldeMin = _supMin - _manqMin;
   let y = 25;
 
   const summaryPills = [
