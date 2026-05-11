@@ -3114,7 +3114,20 @@ function elapsedSince(isoStart) {
 
 /* ---- Session en cours (pas encore terminée) ---- */
 /* ---- Constante journée normale : 8h24 = 504 minutes ---- */
-const HEURES_JOUR_MIN = 8 * 60 + 24; // 504 minutes
+const HEURES_JOUR_MIN = 8 * 60 + 24; // 504 minutes (8h24 par jour ouvrable)
+/* ---- Helper : jour ouvrable (lun-ven) ? ---- */
+function isWeekday(dateStr) {
+  // dateStr = "YYYY-MM-DD"
+  const d = new Date(dateStr + "T12:00:00");
+  const dow = d.getDay(); // 0=dim, 1=lun, ..., 5=ven, 6=sam
+  return dow >= 1 && dow <= 5;
+}
+
+/* ---- Norme par jour selon le type de jour ---- */
+function normeMin(dateStr) {
+  return isWeekday(dateStr) ? HEURES_JOUR_MIN : 0; // Sam/dim = 0 → tout est supp
+}
+
 
 function getActiveSession() {
   return timbrages.find(t => t.dateDebut && !t.dateFin && t.id !== pendingFinId);
@@ -3152,11 +3165,12 @@ function renderTimbrage() {
 
   // ---- Heures supplémentaires / manquantes ----
   let totalSupMin = 0, totalManqMin = 0;
-  Object.values(byDay).forEach(entries => {
-    const dayMin = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
-    const diff   = dayMin - HEURES_JOUR_MIN;
-    if (diff > 0) totalSupMin  += diff;
-    else          totalManqMin += Math.abs(diff);
+  Object.entries(byDay).forEach(([day, entries]) => {
+    const dayMin  = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
+    const norme   = normeMin(day); // 504 si lun-ven, 0 si sam-dim
+    const diff    = dayMin - norme;
+    if (diff > 0) totalSupMin  += diff;       // heures en plus
+    else if (norme > 0) totalManqMin += Math.abs(diff); // manque seulement les jours ouvrables
   });
   const soldeMin = totalSupMin - totalManqMin;
 
@@ -3216,9 +3230,14 @@ function renderTimbrage() {
   const histo = el("timbreHistorique");
   if (!histo) return;
   if (!completed.length) {
-    histo.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-clock"></i>Aucune entrée ce mois</p>`;
+    const joursOuvrables = Object.keys(byDay).filter(d => isWeekday(d)).length;
+  const joursWeekend   = Object.keys(byDay).filter(d => !isWeekday(d)).length;
+  histo.innerHTML = `<p class="empty-msg"><i class="fa-solid fa-clock"></i>Aucune entrée ce mois</p>`;
     return;
   }
+
+  const joursOuvrables = Object.keys(byDay).filter(d => isWeekday(d)).length;
+  const joursWeekend   = Object.keys(byDay).filter(d => !isWeekday(d)).length;
 
   histo.innerHTML = `
     <table class="compta-table">
@@ -3236,7 +3255,7 @@ function renderTimbrage() {
       <tbody>
         ${Object.entries(byDay).sort((a,b) => b[0].localeCompare(a[0])).map(([day, entries]) => {
           const dayTotal = entries.reduce((s,t) => s + (t.dureeMin||0), 0);
-          const dayDiff  = dayTotal - HEURES_JOUR_MIN;
+          const dayDiff  = dayTotal - normeMin(day); // Sam/dim = 0 → tout supp
           const dateLabel = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"long",day:"2-digit",month:"long"});
           const sorted    = [...entries].sort((a,b) => a.dateDebut.localeCompare(b.dateDebut));
 
@@ -3300,7 +3319,7 @@ function renderTimbrage() {
       <tfoot>
         <tr style="background:var(--navy)">
           <td colspan="3" style="padding:.75rem 1.1rem;font-weight:700;color:#fff;font-size:.9rem">
-            TOTAL — ${jours} jour${jours>1?"s":" travaillé"} × 8h24 = ${minutesToHM(jours * HEURES_JOUR_MIN)}
+            TOTAL — ${joursOuvrables} jour${joursOuvrables>1?"s ouvr.":" ouvr."} × 8h24 = ${minutesToHM(joursOuvrables * HEURES_JOUR_MIN)} + ${joursWeekend} WE
           </td>
           <td style="text-align:right;padding:.75rem 1.1rem;font-family:'DM Mono',monospace;font-weight:700;color:#7dd3fc;font-size:1.05rem">
             ${minutesToHM(totalMin)}
@@ -3502,11 +3521,15 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
   let _supMin = 0, _manqMin = 0;
   const _byDayPdf = {};
   monthEntries.forEach(t => { const d=t.dateDebut.slice(0,10); if(!_byDayPdf[d])_byDayPdf[d]=[]; _byDayPdf[d].push(t); });
-  Object.values(_byDayPdf).forEach(entries => {
+  Object.entries(_byDayPdf).forEach(([day, entries]) => {
     const dayMin = entries.reduce((s,t) => s+(t.dureeMin||0), 0);
-    const diff = dayMin - HEURES_JOUR_MIN;
-    if (diff > 0) _supMin += diff; else _manqMin += Math.abs(diff);
+    const norme  = normeMin(day);
+    const diff   = dayMin - norme;
+    if (diff > 0) _supMin += diff;
+    else if (norme > 0) _manqMin += Math.abs(diff);
   });
+  const _joursOuvrables = Object.keys(_byDayPdf).filter(d => isWeekday(d)).length;
+  const _joursWeekend   = Object.keys(_byDayPdf).filter(d => !isWeekday(d)).length;
   const soldeMin = _supMin - _manqMin;
   let y = 25;
 
@@ -3540,7 +3563,7 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
     const sorted   = [...entries].sort((a,b) => a.dateDebut.localeCompare(b.dateDebut));
     const dayLabel = new Date(day+"T12:00:00").toLocaleDateString("fr-CH",{weekday:"short",day:"2-digit",month:"short"});
     const dayTotal = sorted.reduce((s,t) => s+(t.dureeMin||0), 0);
-    const dayDiff  = dayTotal - HEURES_JOUR_MIN;
+    const dayDiff  = dayTotal - normeMin(day);
 
     sorted.forEach((t, i) => {
       rows.push({
@@ -3614,7 +3637,7 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
       7: { textColor:[100,116,148], fontStyle:"italic", fontSize:6.5 },
     },
     foot: [[
-      { content:"TOTAL — "+jours+"j × 8h24 = "+minutesToHM(jours*HEURES_JOUR_MIN), colSpan:3, styles:{halign:"left"} },
+      { content:"TOTAL — "+_joursOuvrables+"j ouvrables × 8h24 = "+minutesToHM(_joursOuvrables*HEURES_JOUR_MIN)+(_joursWeekend?" + "+_joursWeekend+"j WE":""), colSpan:3, styles:{halign:"left"} },
       "", "",
       { content:minutesToHM(totalMin), styles:{halign:"center",fontStyle:"bold",fontSize:9} },
       { content:jours+"j / "+totalSessions+" sess.", styles:{halign:"center"} },
@@ -3687,7 +3710,7 @@ document.getElementById("btnExportTimbrePDF")?.addEventListener("click", async (
   // Données sur une ligne
   const bilanItems = [
     { l:"Heures effectuées",  v: minutesToHM(totalMin),               c:[...NAVY]       },
-    { l:"Heures prévues",     v: minutesToHM(jours * HEURES_JOUR_MIN), c:[80,80,120]     },
+    { l:"Heures prévues (j.ouv.)", v: minutesToHM(_joursOuvrables * HEURES_JOUR_MIN), c:[80,80,120] },
     { l:"Heures supp.",       v: "+" + minutesToHM(_supMin),           c:[22,163,74]     },
     { l:"Heures manq.",       v: "−" + minutesToHM(_manqMin),          c:[220,38,38]     },
     { l:"SOLDE NET",          v: (soldePos?"+":"−") + minutesToHM(Math.abs(soldeMin)), c:[...soldeColor], bold:true },
